@@ -1,10 +1,46 @@
 #!/usr/bin/env python3
-"""TG Studio - single-file Telegram bot manager + messenger UI.
+"""TG Studio - single-file Telegram bot manager + Telegram-style messenger UI.
 
-Backend: python-telegram-bot 20.7 + aiohttp + SQLite.
-Frontend: embedded HTML/CSS/JS served from this same file.
+Это ОДИН Python-файл, который запускает:
+  * Telegram-бот (python-telegram-bot >= 20.8) — ловит и сохраняет все апдейты
+    (сообщения, реакции, опросы, изменения, участники) в локальную SQLite.
+  * Веб-сервер aiohttp с готовым HTML/CSS/JS интерфейсом в стиле Telegram —
+    весь фронтенд встроен прямо в этот файл (никаких внешних статиков).
+  * Реал-тайм WebSocket-канал, чтобы UI обновлялся мгновенно.
 
-See README.md for usage. Never commit your .env.
+Возможности:
+  * Чаты, группы, каналы, в которых состоит бот, со всей видимой ему историей.
+  * Полноценный композер: ответы, редактирование, удаление, реакции,
+    стикеры, фото/видео/документы (drag-and-drop), опросы, inline-кнопки.
+  * Жесты: свайп-вправо чтобы ответить, long-press / правый клик → меню,
+    двойной тап → ❤, pinch-zoom картинок, плавный скролл, мобильная навигация.
+  * Авто-модерация по чатам: бан-слова, антифлуд, антикапс, антиссылки,
+    AI-модерация через OpenRouter с выбором модели и порога.
+  * Онлайн-редактор профиля бота: имя, описание, краткое описание, команды.
+  * AI-ассистент с переключением между всеми моделями OpenRouter из .env.
+  * Мини-апы — пишите HTML/JS, запускайте в песочнице с собственным storage.
+  * PWA: можно «установить» как приложение на телефон.
+
+КАК ЗАПУСТИТЬ:
+
+  1. Установить зависимости:
+       pip install "python-telegram-bot>=20.8,<21" "aiohttp>=3.9,<4"
+
+  2. Запустить файл первый раз:
+       python app.py
+     Если рядом нет .env — он будет создан с шаблоном. Откройте .env,
+     впишите туда хотя бы TG_BOT_TOKEN, и запустите снова.
+
+  3. Открыть в браузере http://localhost:8080/?token=<WEB_ACCESS_TOKEN>
+
+ВАЖНО ПРО ОГРАНИЧЕНИЯ Telegram Bot API:
+  * Бот видит только сообщения, адресованные ему, или (в группах) все, если
+    в @BotFather у бота выключен Privacy Mode (BotFather → /mybots → выбрать
+    бота → Bot Settings → Group Privacy → Turn off).
+  * Историю до момента запуска бота получить нельзя — это ограничение API.
+  * Аватарку самого бота можно менять только через @BotFather, не через API.
+  * Нельзя «увидеть выделение текста в Telegram-приложении пользователя» —
+    Bot API такого не отдаёт. Выделение работает внутри нашего UI.
 """
 from __future__ import annotations
 
@@ -72,10 +108,51 @@ FILES_DIR.mkdir(exist_ok=True)
 DB_PATH = DATA_DIR / "tgstudio.sqlite3"
 
 
+DEFAULT_ENV = """\
+# TG Studio config. Auto-created on first run. Don't commit this file.
+# After editing, restart the app.
+
+# --- Telegram bot ---
+TG_BOT_TOKEN=
+TG_OWNER_ID=
+TG_CHANNEL_ID=
+TG_OWNER_USERNAME=
+
+# --- Web app ---
+WEB_HOST=0.0.0.0
+WEB_PORT=8080
+# Случайно сгенерируйте или впишите свой — этот токен защищает админ-панель.
+WEB_ACCESS_TOKEN=changeme-please
+
+# --- OpenRouter (заполните те ключи, что есть; можно частично) ---
+OPENROUTER_KEY_1=
+OPENROUTER_KEY_2=
+OPENROUTER_KEY_3=
+OPENROUTER_KEY_4=
+OPENROUTER_KEY_5=
+OPENROUTER_KEY_6=
+OPENROUTER_KEY_7=
+OPENROUTER_KEY_8=
+OPENROUTER_KEY_9=
+OPENROUTER_KEY_10=
+OPENROUTER_KEY_11=
+OPENROUTER_KEY_12=
+OPENROUTER_KEY_13=
+
+AI_DEFAULT_MODEL=qwen/qwen3-next-80b-a3b-instruct:free
+"""
+
+
 def load_env() -> None:
-    """Minimal .env loader (so we don't need python-dotenv)."""
+    """Minimal .env loader (no external dependency)."""
     env_file = ROOT / ".env"
     if not env_file.exists():
+        # Create a template so the user knows what to fill in.
+        env_file.write_text(DEFAULT_ENV, "utf-8")
+        print(
+            f"[tgstudio] Создан шаблон {env_file}. Откройте его, впишите хотя бы TG_BOT_TOKEN,\n"
+            "           и запустите программу снова. WEB_ACCESS_TOKEN тоже стоит поменять."
+        )
         return
     for raw in env_file.read_text("utf-8").splitlines():
         line = raw.strip()
