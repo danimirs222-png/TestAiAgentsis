@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes">
+<title>{{TITLE}}</title>
+<style>
+html,body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+</style>
+</head>
+<body>
+<script>
+/* Sandbox helpers exposed to mini apps */
+window.TGStudio = {
+  appId: "{{ID}}",
+  storage: {
+    get: k => JSON.parse(localStorage.getItem("ma:{{ID}}:" + k) || "null"),
+    set: (k, v) => localStorage.setItem("ma:{{ID}}:" + k, JSON.stringify(v)),
+    del: k => localStorage.removeItem("ma:{{ID}}:" + k),
+    keys: () => Object.keys(localStorage).filter(x => x.startsWith("ma:{{ID}}:")).map(x => x.slice(("ma:{{ID}}:").length))
+  },
+  close: () => parent.postMessage({ type: "tg-mini-close", id: "{{ID}}" }, "*"),
+  notify: msg => parent.postMessage({ type: "tg-mini-notify", id: "{{ID}}", message: msg }, "*"),
+};
+</script>
+{{BODY}}
+</body>
+</html>

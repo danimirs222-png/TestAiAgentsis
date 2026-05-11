@@ -1,0 +1,4 @@
+# PTB 20.7 doesn't have the reactions API; 20.8 is the closest 20.x release that
+# does. We pin to the 20.8.x line so the userspace API stays familiar.
+python-telegram-bot>=20.8,<21
+aiohttp>=3.9,<4
