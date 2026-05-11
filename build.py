@@ -21,6 +21,9 @@ idx = idx.replace("__INJECT_APP_JS__", js)
 for blob_name, blob in [("index", idx), ("sw", sw), ("mini", mini)]:
     if '"""' in blob:
         raise SystemExit(f"{blob_name} contains triple double-quotes; cannot embed")
+    # raw triple-quoted Python strings disallow a trailing backslash before """
+    if blob.rstrip('\n').endswith('\\'):
+        raise SystemExit(f"{blob_name} ends with backslash; cannot embed as raw string")
 
 
 def find_block(label: str) -> tuple[int, int]:
@@ -46,7 +49,9 @@ def find_block(label: str) -> tuple[int, int]:
 
 def replace_block(t: str, label: str, payload: str) -> str:
     s, e = find_block_in(t, label)
-    return t[:s] + '"""' + payload + '"""' + t[e:]
+    # Use raw string so backslash sequences inside JS (\n, \t, \u) are not
+    # interpreted by the Python parser when app.py is loaded.
+    return t[:s] + 'r"""' + payload + '"""' + t[e:]
 
 
 def find_block_in(t: str, label: str) -> tuple[int, int]:
@@ -63,6 +68,13 @@ def find_block_in(t: str, label: str) -> tuple[int, int]:
     else:
         raise ValueError(label)
     i = t.index(prefix)
+    # The assignment may use r"""...""" (raw) or """...""". Detect either.
+    if t[i + len(prefix)] == 'r':
+        q1 = t.index('r"""', i)
+        # treat the leading 'r' as part of the opener so the replacement removes it
+        # along with the closing triple-quote.
+        q2 = t.index('"""', q1 + 4)
+        return q1, q2 + 3
     q1 = t.index('"""', i)
     q2 = t.index('"""', q1 + 3)
     return q1, q2 + 3
