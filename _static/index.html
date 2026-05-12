@@ -150,9 +150,11 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
   position: relative;
   background: var(--tg-side);
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;  /* header / tabs / scrollable chat list */
   border-right: 1px solid var(--tg-divider);
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 .side-header {
   height: calc(var(--header-h) + var(--safe-t));
@@ -208,7 +210,7 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
   margin-left: 6px; padding: 0 5px;
 }
 
-.side-body { overflow-y: auto; }
+.side-body { overflow-y: auto; min-height: 0; }
 
 /* Chat row */
 .chat-row {
@@ -234,9 +236,10 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
 .chat-row-title {
   font-weight: 500; font-size: 15px;
   white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 6px;
   min-width: 0;
 }
+.chat-row-title > span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .chat-row-time {
   grid-column: 3; grid-row: 1;
   color: var(--tg-text-3); font-size: 12px;
@@ -286,6 +289,17 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
 .av-c7 { background: linear-gradient(135deg, #e0a2f3, #d669ed); }
 .av-c8 { background: linear-gradient(135deg, #b1c1f3, #7079ec); }
 
+/* Per-user name colors (mirrors avatar palette but as a solid foreground color).
+   Used on .bubble-name and .bubble-reply-name. */
+.nc-1 { color: #ff7e6c; }
+.nc-2 { color: #ffb961; }
+.nc-3 { color: #78a2ff; }
+.nc-4 { color: #7ddc7e; }
+.nc-5 { color: #4cd7c8; }
+.nc-6 { color: #4fb9f6; }
+.nc-7 { color: #d780eb; }
+.nc-8 { color: #8b95f0; }
+
 .badge-star {
   display: inline-block;
   background: linear-gradient(135deg, var(--tg-premium) 0%, var(--tg-premium-2) 100%);
@@ -331,6 +345,8 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
   grid-template-rows: auto 1fr auto;
   background: var(--tg-chat-bg);
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 .main:empty,
 .main.placeholder {
@@ -365,7 +381,7 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
 .chat-header-title {
   font-weight: 500; font-size: 15.5px;
   white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 6px;
 }
 .chat-header-status { font-size: 13px; color: var(--tg-text-3); white-space: nowrap; }
 .chat-header-status.online { color: var(--tg-accent); }
@@ -380,9 +396,10 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
   scroll-behavior: smooth;
   overscroll-behavior: contain;
   position: relative;
+  min-height: 0;
 }
 .msgs-inner {
-  display: flex; flex-direction: column-reverse;
+  display: flex; flex-direction: column;  /* normal order: oldest top, newest bottom */
   width: 100%;
   margin-top: auto;
   max-width: 720px;
@@ -411,6 +428,12 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
 .msg.in .avatar.s32 { margin-right: 8px; align-self: flex-end; }
 .msg-stack { display: grid; grid-template-columns: 1fr; gap: 1px; max-width: 78%; }
 .msg.out .msg-stack { align-items: flex-end; }
+/* Add visible breathing room between consecutive different senders */
+.msg.first-of-stack { padding-top: 10px; }
+.msg.last-of-stack { padding-bottom: 2px; }
+/* When the row is the LAST of a stack but the next sender is different, give
+   a bit more space before the next stack starts. */
+.msg + .msg.first-of-stack { margin-top: 2px; }
 
 .bubble {
   position: relative;
@@ -446,10 +469,22 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
 
 .bubble-name {
   font-size: 13.5px; font-weight: 600;
+  /* Default color used only if no .nc-N class is set. */
   color: var(--tg-accent);
   display: flex; align-items: center; gap: 4px;
   margin-bottom: 2px;
 }
+/* When a per-user color class is applied, it wins over the defaults. */
+.bubble-name.nc-1, .bubble-name.nc-2, .bubble-name.nc-3, .bubble-name.nc-4,
+.bubble-name.nc-5, .bubble-name.nc-6, .bubble-name.nc-7, .bubble-name.nc-8 { color: inherit; }
+.bubble-name.nc-1 { color: #ff7e6c; }
+.bubble-name.nc-2 { color: #ffb961; }
+.bubble-name.nc-3 { color: #78a2ff; }
+.bubble-name.nc-4 { color: #7ddc7e; }
+.bubble-name.nc-5 { color: #4cd7c8; }
+.bubble-name.nc-6 { color: #4fb9f6; }
+.bubble-name.nc-7 { color: #d780eb; }
+.bubble-name.nc-8 { color: #8b95f0; }
 .msg.out .bubble-name { color: #95c8ff; }
 .bubble-text { white-space: pre-wrap; word-break: break-word; }
 .bubble-text a { color: var(--tg-link); }
@@ -547,9 +582,42 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
   display: grid;
   grid-template-columns: 44px 1fr;
   gap: 10px; align-items: center;
-  min-width: 220px;
+  min-width: 240px;
 }
-.media-audio audio { width: 100%; }
+.media-audio audio { display: none; }  /* hidden — we drive playback ourselves */
+.media-audio .tg-player {
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 0;
+}
+.media-audio .tg-player-row {
+  display: flex; align-items: center; gap: 8px;
+}
+.media-audio .tg-player-progress {
+  flex: 1; height: 3px; background: rgba(255,255,255,.18);
+  border-radius: 2px; position: relative; cursor: pointer;
+  min-width: 80px;
+}
+.media-audio .tg-player-fill {
+  position: absolute; top: 0; left: 0; height: 100%;
+  background: var(--tg-accent); border-radius: 2px;
+  transition: width .15s linear;
+}
+.msg.out .media-audio .tg-player-fill { background: #fff; }
+.media-audio .tg-player-time {
+  font-size: 12px; color: var(--tg-text-2);
+  font-variant-numeric: tabular-nums;
+  min-width: 38px;
+}
+.msg.out .media-audio .tg-player-time { color: rgba(255,255,255,.78); }
+.media-audio .tg-player-name {
+  font-size: 13.5px; font-weight: 500; color: var(--tg-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.media-audio .media-doc-icon { cursor: pointer; }
+.media-audio .media-doc-icon.playing svg { transform: scale(.9); }
+.media-audio .media-doc-icon svg.icon-pause,
+.media-audio .media-doc-icon.playing svg.icon-play { display: none; }
+.media-audio .media-doc-icon.playing svg.icon-pause { display: block; }
 
 .media-voice {
   display: grid;

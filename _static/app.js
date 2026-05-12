@@ -76,8 +76,60 @@ function avInitial(name) {
 }
 
 function avColor(id) {
+  return 'av-c' + nameColorIdx(id);
+}
+function nameColor(id) {
+  return 'nc-' + nameColorIdx(id);
+}
+function nameColorIdx(id) {
   const n = (typeof id === 'number') ? id : (id ? id.toString().split('').reduce((a, c) => a + c.charCodeAt(0), 0) : 0);
-  return 'av-c' + (((n % 8) + 8) % 8 + 1);
+  return ((n % 8) + 8) % 8 + 1;
+}
+
+// In-memory cache for avatar URLs we've already verified exist.
+// Maps "user:<id>"/"chat:<id>" -> url or null (404 / no photo).
+const _avatarCache = new Map();
+
+/**
+ * Render a Telegram-style avatar.
+ *   id     — entity id (negative for groups/channels, positive for users)
+ *   name   — display name (used for initial)
+ *   size   — '', 's32', 's40', 's96', 's120'
+ *   type   — 'user' | 'chat'  (default 'user'; chats use /api/chats/.../photo)
+ * Returns a div containing initials + gradient bg. Asynchronously fetches the
+ * real photo and swaps in an <img> when ready.
+ */
+function renderAvatar(id, name, size, type, extraOpts) {
+  type = type || 'user';
+  size = size || '';
+  const cls = 'avatar ' + (size ? size + ' ' : '') + avColor(id);
+  const div = ce('div', Object.assign({ class: cls }, extraOpts || {}), avInitial(name));
+  if (!id) return div;
+  const key = type + ':' + id;
+  // From cache
+  if (_avatarCache.has(key)) {
+    const url = _avatarCache.get(key);
+    if (url) {
+      const img = new Image();
+      img.src = url;
+      img.onload = () => { div.textContent = ''; div.appendChild(img); };
+    }
+    return div;
+  }
+  // Negative chat_id needs proper URL encoding.
+  const base = type === 'chat'
+    ? `/api/chats/${encodeURIComponent(id)}/photo`
+    : `/api/users/${encodeURIComponent(id)}/photo`;
+  const url = base + (TOKEN ? `?token=${encodeURIComponent(TOKEN)}` : '');
+  const probe = new Image();
+  probe.onload = () => {
+    _avatarCache.set(key, url);
+    div.textContent = '';
+    div.appendChild(probe);
+  };
+  probe.onerror = () => { _avatarCache.set(key, null); };
+  probe.src = url;
+  return div;
 }
 
 function fmtTime(ts) {
@@ -153,6 +205,7 @@ const SVG = {
   download:'<svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>',
   doc:     '<svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/></svg>',
   play:    '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
+  pause:   '<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>',
   mic:     '<svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5a3 3 0 0 0-6 0v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>',
   poll:    '<svg viewBox="0 0 24 24"><path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM7 10h2v7H7zm4-3h2v10h-2zm4 6h2v4h-2z"/></svg>',
   photo:   '<svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>',
@@ -320,7 +373,13 @@ function handleEvent(data) {
         } else {
           loadChats();
         }
-        if (state.current === p.chat_id) renderMessages();
+        if (state.current === p.chat_id) {
+          const s = $('#msgsScroll');
+          // Only auto-scroll to bottom if user was already near the bottom.
+          const wasAtBottom = !s || (s.scrollHeight - s.scrollTop - s.clientHeight < 80);
+          renderMessages();
+          if (wasAtBottom && s) requestAnimationFrame(() => { s.scrollTop = s.scrollHeight; });
+        }
       }
       break;
     }
@@ -367,15 +426,29 @@ function handleEvent(data) {
 
 // ============= 5. Sidebar =================================================
 
+let _loadChatsInflight = null;
+let _loadChatsQueued = false;
 async function loadChats() {
-  try {
-    const chats = await api('/api/chats');
-    state.chats.clear();
-    for (const c of chats) state.chats.set(c.id, c);
-    renderChatList();
-  } catch (e) {
-    console.error(e);
-  }
+  // Coalesce — many WS events can call us in a tight loop while the bot's
+  // initial chat list arrives. One in-flight + one queued is enough.
+  if (_loadChatsInflight) { _loadChatsQueued = true; return _loadChatsInflight; }
+  _loadChatsInflight = (async () => {
+    try {
+      const chats = await api('/api/chats');
+      state.chats.clear();
+      for (const c of chats) state.chats.set(c.id, c);
+      renderChatList();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      _loadChatsInflight = null;
+      if (_loadChatsQueued) {
+        _loadChatsQueued = false;
+        setTimeout(loadChats, 300);
+      }
+    }
+  })();
+  return _loadChatsInflight;
 }
 
 function chatRowPreview(c) {
@@ -426,11 +499,9 @@ function renderChatList() {
       class: 'chat-row' + (state.current === c.id ? ' active' : ''),
       onclick: () => openChat(c.id),
     });
-    row.appendChild(ce('div', {
-      class: 'avatar ' + avColor(c.id),
-    }, avInitial(c.title || c.username || String(c.id))));
+    row.appendChild(renderAvatar(c.id, c.title || c.username || String(c.id), '', c.type === 'private' ? 'user' : 'chat'));
     const top = ce('div', { class: 'chat-row-top' });
-    top.appendChild(ce('div', { class: 'chat-row-title' }, c.title || c.username || String(c.id), ...chatTags(c)));
+    top.appendChild(ce('div', { class: 'chat-row-title' }, ce('span', {}, c.title || c.username || String(c.id)), ...chatTags(c)));
     row.appendChild(top);
     if (c.last_message_at) row.appendChild(ce('div', { class: 'chat-row-time' }, fmtTime(c.last_message_at)));
     const prev = ce('div', { class: 'chat-row-preview' });
@@ -522,9 +593,9 @@ function renderChat() {
   const header = ce('header', { class: 'chat-header' });
   const backBtn = ce('button', { class: 'icon-btn', html: SVG.back, onclick: e => { e.stopPropagation(); closeChat(); } });
   if (window.innerWidth <= 768) header.appendChild(backBtn);
-  header.appendChild(ce('div', { class: 'avatar s40 ' + avColor(chat.id) }, avInitial(chat.title)));
+  header.appendChild(renderAvatar(chat.id, chat.title || String(chat.id), 's40', chat.type === 'private' ? 'user' : 'chat'));
   const meta = ce('div', { class: 'chat-header-meta' });
-  meta.appendChild(ce('div', { class: 'chat-header-title' }, chat.title || String(chat.id), ...chatTags(chat)));
+  meta.appendChild(ce('div', { class: 'chat-header-title' }, ce('span', {}, chat.title || String(chat.id)), ...chatTags(chat)));
   const statusText = chatStatus(chat);
   meta.appendChild(ce('div', { class: 'chat-header-status' }, statusText));
   header.appendChild(meta);
@@ -594,7 +665,7 @@ function renderMessages() {
   const inner = $('#msgsInner'); if (!inner) return;
   inner.innerHTML = '';
   const map = getMsgMap(state.current);
-  // Ordered ascending by date
+  // Ordered ascending by date — oldest at top, newest at bottom (normal chat order).
   const arr = Array.from(map.values()).sort((a, b) => a.date - b.date);
 
   // Group by media_group_id
@@ -607,25 +678,24 @@ function renderMessages() {
   }
   const renderedGroup = new Set();
 
-  // Walk in reverse (newest first), DOM goes column-reverse so first-pushed is bottom
-  let prevDay = null;
-  for (let i = arr.length - 1; i >= 0; i--) {
+  let prevDayKey = null;
+  for (let i = 0; i < arr.length; i++) {
     const m = arr[i];
+    // Day separator BEFORE first message of each day.
+    const dayKey = new Date(m.date * 1000).toDateString();
+    if (dayKey !== prevDayKey) {
+      inner.appendChild(ce('div', { class: 'date-sep' }, fmtDateHeading(m.date)));
+      prevDayKey = dayKey;
+    }
     if (m.media_group_id && renderedGroup.has(m.media_group_id)) continue;
     if (m.media_group_id) {
       renderedGroup.add(m.media_group_id);
       const all = groups.get(m.media_group_id).sort((a, b) => a.message_id - b.message_id);
       inner.appendChild(renderMessageGroup(all));
     } else {
-      const next = arr[i - 1];
-      const prev = arr[i + 1];
+      const prev = arr[i - 1];
+      const next = arr[i + 1];
       inner.appendChild(renderSingleMessage(m, prev, next));
-    }
-    // Day separator
-    const d = new Date(m.date * 1000).toDateString();
-    const nextEarlier = i > 0 ? arr[i - 1] : null;
-    if (!nextEarlier || new Date(nextEarlier.date * 1000).toDateString() !== d) {
-      inner.appendChild(ce('div', { class: 'date-sep' }, fmtDateHeading(m.date)));
     }
   }
 }
@@ -639,15 +709,17 @@ function renderSingleMessage(m, prev, next) {
   const sameSender = prev && prev.sender_id === m.sender_id && !prev.media_group_id && (m.date - prev.date) < 300;
   const sameSenderNext = next && next.sender_id === m.sender_id && !next.media_group_id && (next.date - m.date) < 300;
 
-  const row = ce('div', { class: 'msg ' + (out ? 'out' : 'in'), dataset: { mid: m.message_id } });
+  let cls = 'msg ' + (out ? 'out' : 'in');
+  if (!sameSender) cls += ' first-of-stack';
+  if (!sameSenderNext) cls += ' last-of-stack';
+  const row = ce('div', { class: cls, dataset: { mid: m.message_id } });
   row._msg = m;
 
   if (!out && !sameSenderNext) {
     const sender = state.users.get(m.sender_id) || {};
-    row.appendChild(ce('div', {
-      class: 'avatar s32 ' + avColor(m.sender_id),
+    row.appendChild(renderAvatar(m.sender_id, sender.first_name || sender.username || '?', 's32', 'user', {
       onclick: e => { e.stopPropagation(); openUserDrawer(m.sender_id); }
-    }, avInitial(sender.first_name || sender.username || '?')));
+    }));
   } else if (!out) {
     row.appendChild(ce('div', { class: 'avatar s32', style: { visibility: 'hidden' } }));
   }
@@ -670,17 +742,16 @@ function renderMessageGroup(msgs) {
   const row = ce('div', { class: 'msg ' + (out ? 'out' : 'in') });
   if (!out) {
     const sender = state.users.get(m.sender_id) || {};
-    row.appendChild(ce('div', {
-      class: 'avatar s32 ' + avColor(m.sender_id),
+    row.appendChild(renderAvatar(m.sender_id, sender.first_name || sender.username || '?', 's32', 'user', {
       onclick: e => { e.stopPropagation(); openUserDrawer(m.sender_id); }
-    }, avInitial(sender.first_name || sender.username || '?')));
+    }));
   }
   const stack = ce('div', { class: 'msg-stack' });
   const bubble = ce('div', { class: 'bubble' + (msgs.some(x => x.media_type === 'document') ? '' : ' media-only') });
   if (!out && (msgs[0].caption || msgs[0].text)) {
     // sender label
     const sender = state.users.get(m.sender_id) || {};
-    const nameRow = ce('div', { class: 'bubble-name' }, sender.first_name || sender.username || '');
+    const nameRow = ce('div', { class: 'bubble-name ' + nameColor(m.sender_id) }, sender.first_name || sender.username || '');
     if (sender.is_premium) nameRow.appendChild(ce('span', { class: 'badge-star' }, '★'));
     bubble.appendChild(nameRow);
   }
@@ -735,7 +806,7 @@ function renderBubble(m, { out, sameSender, sameSenderNext }) {
     const c = state.chats.get(state.current);
     if (c && c.type !== 'private') {
       const sender = state.users.get(m.sender_id) || {};
-      const nameRow = ce('div', { class: 'bubble-name' }, sender.first_name || sender.username || '');
+      const nameRow = ce('div', { class: 'bubble-name ' + nameColor(m.sender_id) }, sender.first_name || sender.username || '');
       if (sender.is_premium) nameRow.appendChild(ce('span', { class: 'badge-star' }, '★'));
       bubble.appendChild(nameRow);
     }
@@ -749,7 +820,7 @@ function renderBubble(m, { out, sameSender, sameSenderNext }) {
       class: 'bubble-reply',
       onclick: e => { e.stopPropagation(); scrollToMessage(m.reply_to_message_id); }
     },
-      ce('div', { class: 'bubble-reply-name' }, repSender ? (repSender.first_name || repSender.username || '') : 'Сообщение'),
+      ce('div', { class: 'bubble-reply-name ' + nameColor(repSender ? (repSender.id || rep?.sender_id || 0) : (rep?.sender_id || 0)) }, repSender ? (repSender.first_name || repSender.username || '') : 'Сообщение'),
       ce('div', { class: 'bubble-reply-text' }, rep ? ((rep.text || rep.caption || mediaLabel(rep) || '').slice(0, 80)) : '...'),
     ));
   }
@@ -861,11 +932,63 @@ function renderDocBlock(m) {
 
 function renderAudioBlock(m, url) {
   const wrap = ce('div', { class: 'media-audio' });
-  wrap.appendChild(ce('div', { class: 'media-doc-icon', html: m.media_type === 'voice' ? SVG.mic : SVG.play }));
-  const info = ce('div');
-  info.appendChild(ce('audio', { controls: 'controls', src: url, preload: 'metadata', style: { width: '220px' } }));
-  if (m.media_type === 'audio' && m.file_name) info.appendChild(ce('div', { class: 'media-doc-meta' }, m.file_name));
-  wrap.appendChild(info);
+  const icon = ce('div', { class: 'media-doc-icon' });
+  // Two SVGs; CSS toggles which one is visible based on .playing.
+  const playSvg = document.createElement('span');
+  playSvg.innerHTML = SVG.play; playSvg.firstChild.classList.add('icon-play');
+  const pauseSvg = document.createElement('span');
+  pauseSvg.innerHTML = SVG.pause; pauseSvg.firstChild.classList.add('icon-pause');
+  icon.appendChild(playSvg.firstChild);
+  icon.appendChild(pauseSvg.firstChild);
+
+  const player = ce('div', { class: 'tg-player' });
+  if (m.media_type === 'audio' && m.file_name) {
+    player.appendChild(ce('div', { class: 'tg-player-name' }, m.file_name));
+  } else if (m.media_type === 'voice') {
+    player.appendChild(ce('div', { class: 'tg-player-name' }, 'Голосовое сообщение'));
+  }
+  const row = ce('div', { class: 'tg-player-row' });
+  const progress = ce('div', { class: 'tg-player-progress' });
+  const fill = ce('div', { class: 'tg-player-fill', style: { width: '0%' } });
+  progress.appendChild(fill);
+  const time = ce('div', { class: 'tg-player-time' }, '0:00');
+  row.append(progress, time);
+  player.appendChild(row);
+
+  const audio = ce('audio', { src: url, preload: 'metadata' });
+  wrap.append(icon, player, audio);
+
+  const fmt = (s) => {
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60), x = Math.floor(s % 60);
+    return m + ':' + String(x).padStart(2, '0');
+  };
+  const toggle = (e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    // Pause any other audio currently playing.
+    document.querySelectorAll('.media-audio audio').forEach(a => { if (a !== audio && !a.paused) a.pause(); });
+    if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+  };
+  icon.onclick = toggle;
+  audio.onplay = () => icon.classList.add('playing');
+  audio.onpause = () => icon.classList.remove('playing');
+  audio.onended = () => { icon.classList.remove('playing'); fill.style.width = '0%'; time.textContent = fmt(audio.duration || m.duration || 0); };
+  audio.onloadedmetadata = () => { time.textContent = fmt(audio.duration || m.duration || 0); };
+  audio.ontimeupdate = () => {
+    const d = audio.duration || m.duration || 0;
+    fill.style.width = (d > 0 ? (audio.currentTime / d * 100) : 0) + '%';
+    time.textContent = fmt(d > 0 ? d - audio.currentTime : 0);
+  };
+  progress.onclick = (e) => {
+    const rect = progress.getBoundingClientRect();
+    const r = (e.clientX - rect.left) / rect.width;
+    const d = audio.duration || 0;
+    if (d > 0) audio.currentTime = r * d;
+  };
+  // Replace play icon with mic for voice messages.
+  if (m.media_type === 'voice') {
+    icon.querySelector('.icon-play').innerHTML = SVG.mic.match(/<path[^/]*\/>/)[0];
+  }
   return wrap;
 }
 
@@ -924,19 +1047,27 @@ function renderInlineKeyboard(m) {
 
 function renderReactions(m) {
   const wrap = ce('div', { class: 'reactions' });
-  // Aggregate by emoji
+  // Aggregate by emoji. Reactions array may contain a mix of per-user entries
+  // (one row per reactor) and aggregated entries (one row with a count).
   const counts = {};
+  const customByEmoji = {};
   let myEmoji = null;
   for (const r of m.reactions || []) {
-    const em = r.type === 'emoji' ? r.emoji : (r.type === 'custom_emoji' ? '★' : '?');
-    counts[em] = (counts[em] || 0) + 1;
-    if (r.user_id === state.me?.id) myEmoji = em;
+    let em;
+    if (r.type === 'emoji') em = r.emoji;
+    else if (r.type === 'custom' || r.type === 'custom_emoji') {
+      em = '⭐';  // placeholder, lazy-replaced by getCustomEmojiStickers
+      if (r.custom_emoji_id) customByEmoji[em] = r.custom_emoji_id;
+    } else em = '?';
+    const inc = r.agg ? (r.count || 1) : 1;
+    counts[em] = (counts[em] || 0) + inc;
+    if (!r.agg && r.user_id === state.me?.id) myEmoji = em;
   }
   for (const [em, n] of Object.entries(counts)) {
     wrap.appendChild(ce('div', {
       class: 'reaction' + (em === myEmoji ? ' me' : ''),
       onclick: e => { e.stopPropagation(); setReaction(m, em === myEmoji ? null : em); },
-    }, ce('span', { class: 'em' }, em), n > 1 ? String(n) : ''));
+    }, ce('span', { class: 'em' }, em), n > 0 ? String(n) : ''));
   }
   return wrap;
 }
@@ -1150,7 +1281,7 @@ function openForwardModal(m) {
       } catch (e) { toast('Ошибка: ' + e.message); }
       back.remove();
     }});
-    item.appendChild(ce('div', { class: 'avatar s40 ' + avColor(c.id) }, avInitial(c.title)));
+    item.appendChild(renderAvatar(c.id, c.title || String(c.id), 's40', c.type === 'private' ? 'user' : 'chat'));
     item.appendChild(ce('div', {}, ce('div', { style: { fontSize: '14px' } }, c.title || String(c.id)), ce('div', { style: { fontSize: '12px', color: 'var(--tg-text-3)' } }, chatStatus(c))));
     list.appendChild(item);
   }
@@ -1612,7 +1743,7 @@ async function loadProfilePage(page) {
     }
     body.appendChild(ce('div', { class: 'page-section' },
       ce('div', { style: 'display:flex; align-items:center; gap:14px; padding:8px 0' },
-        ce('div', { class: 'avatar s96 ' + avColor(me.id) }, avInitial(me.first_name)),
+        renderAvatar(me.id, me.first_name || '?', 's96', 'user'),
         ce('div', {},
           ce('div', { style: 'font-size:18px; font-weight:600' }, me.first_name + ' ' + (me.last_name || ''),
             ce('span', { class: 'tag-bot' }, 'BOT')),
@@ -2007,7 +2138,7 @@ async function loadPollVoters(pollId) {
     if (!voters.length) { list.appendChild(ce('div', { class: 'desc', style: 'padding:14px' }, 'Пока никто не голосовал, либо опрос анонимный и API не отдаёт имена.')); return; }
     for (const v of voters) {
       const it = ce('div', { class: 'item' });
-      it.appendChild(ce('div', { class: 'avatar s40 ' + avColor(v.user_id) }, avInitial(v.first_name || v.username || '?')));
+      it.appendChild(renderAvatar(v.user_id, v.first_name || v.username || '?', 's40', 'user'));
       const meta = ce('div', { class: 'flex' });
       meta.appendChild(ce('div', { style: 'font-size:14.5px; display:flex; align-items:center; gap:4px' },
         (v.first_name || '') + ' ' + (v.last_name || ''),
@@ -2050,7 +2181,7 @@ async function openAdminsList(chatId) {
     const list = ce('div', { class: 'user-list' });
     for (const a of admins) {
       const it = ce('div', { class: 'item', onclick: () => { back.remove(); openUserDrawer(a.user_id); } });
-      it.appendChild(ce('div', { class: 'avatar s40 ' + avColor(a.user_id) }, avInitial(a.first_name || a.username || '?')));
+      it.appendChild(renderAvatar(a.user_id, a.first_name || a.username || '?', 's40', 'user'));
       const meta = ce('div', {});
       meta.appendChild(ce('div', { style: 'font-size:14.5px; display:flex; align-items:center; gap:4px' },
         (a.first_name || '') + ' ' + (a.last_name || ''),

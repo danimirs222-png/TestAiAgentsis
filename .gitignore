@@ -9,6 +9,8 @@
 data/
 files/
 uploads/
+# Personalization script — holds the user's actual tokens for delivery; never commit.
+personalize.py
 
 # Python
 __pycache__/

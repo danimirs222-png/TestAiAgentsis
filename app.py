@@ -148,27 +148,69 @@ AI_DEFAULT_MODEL=qwen/qwen3-next-80b-a3b-instruct:free
 """
 
 
+# ---------------------------------------------------------------------------
+# Inline defaults — DO NOT EDIT IN-REPO. Personalized at delivery time so the
+# user can `python3 app.py` with zero configuration. Anything set here is used
+# *only* when the same key is missing from the environment / `.env` file.
+# Strings beginning with `__SET_ME` are treated as unset.
+# ---------------------------------------------------------------------------
+INLINE_DEFAULTS: dict[str, str] = {
+    "TG_BOT_TOKEN": "__SET_ME_TG_BOT_TOKEN__",
+    "TG_OWNER_ID": "__SET_ME_TG_OWNER_ID__",
+    "TG_OWNER_USERNAME": "__SET_ME_TG_OWNER_USERNAME__",
+    "TG_CHANNEL_ID": "__SET_ME_TG_CHANNEL_ID__",
+    "WEB_HOST": "0.0.0.0",
+    "WEB_PORT": "8080",
+    "WEB_ACCESS_TOKEN": "",
+    "AI_DEFAULT_MODEL": "qwen/qwen3-next-80b-a3b-instruct:free",
+    "OPENROUTER_KEY_1": "__SET_ME_OPENROUTER_KEY_1__",
+    "OPENROUTER_KEY_2": "__SET_ME_OPENROUTER_KEY_2__",
+    "OPENROUTER_KEY_3": "__SET_ME_OPENROUTER_KEY_3__",
+    "OPENROUTER_KEY_4": "__SET_ME_OPENROUTER_KEY_4__",
+    "OPENROUTER_KEY_5": "__SET_ME_OPENROUTER_KEY_5__",
+    "OPENROUTER_KEY_6": "__SET_ME_OPENROUTER_KEY_6__",
+    "OPENROUTER_KEY_7": "__SET_ME_OPENROUTER_KEY_7__",
+    "OPENROUTER_KEY_8": "__SET_ME_OPENROUTER_KEY_8__",
+    "OPENROUTER_KEY_9": "__SET_ME_OPENROUTER_KEY_9__",
+    "OPENROUTER_KEY_10": "__SET_ME_OPENROUTER_KEY_10__",
+    "OPENROUTER_KEY_11": "__SET_ME_OPENROUTER_KEY_11__",
+    "OPENROUTER_KEY_12": "__SET_ME_OPENROUTER_KEY_12__",
+    "OPENROUTER_KEY_13": "__SET_ME_OPENROUTER_KEY_13__",
+}
+
+
 def load_env() -> None:
-    """Minimal .env loader (no external dependency)."""
-    import secrets as _secrets
+    """Minimal .env loader (no external dependency). Inline defaults are
+    applied last and only fill in keys that are still unset."""
     env_file = ROOT / ".env"
-    if not env_file.exists():
+    # Only auto-create .env if NONE of the inline defaults are populated. If the
+    # file was personalized for the user, they don't need a .env at all.
+    inline_populated = any(
+        not v.startswith("__SET_ME") for k, v in INLINE_DEFAULTS.items()
+        if k in {"TG_BOT_TOKEN", "OPENROUTER_KEY_1"}
+    )
+    if not env_file.exists() and not inline_populated:
         env_file.write_text(DEFAULT_ENV, "utf-8")
         print(
             f"[tgstudio] Создан шаблон {env_file}.\n"
             f"           Впишите туда TG_BOT_TOKEN (токен бота из @BotFather),\n"
             f"           чтобы бот заработал. Web-UI запустится и без него (будет без чатов)."
         )
-        # Don't return — fall through and load the freshly-written file so the
-        # current process boots normally.
-    for raw in env_file.read_text("utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    if env_file.exists():
+        for raw in env_file.read_text("utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            os.environ.setdefault(key, val)
+    # Apply INLINE_DEFAULTS only for keys still unset.
+    for k, v in INLINE_DEFAULTS.items():
+        if v.startswith("__SET_ME"):
             continue
-        key, _, val = line.partition("=")
-        key = key.strip()
-        val = val.strip().strip('"').strip("'")
-        os.environ.setdefault(key, val)
+        if not os.environ.get(k):
+            os.environ[k] = v
     # The "changeme-please" placeholder from earlier versions of .env should
     # behave like no token at all (auth disabled). Drop it.
     cur = os.environ.get("WEB_ACCESS_TOKEN", "").strip()
@@ -1083,6 +1125,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def on_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Per-user reaction change (delivered when bot is admin in the chat,
+    or in private chats / small groups)."""
     r = update.message_reaction
     if not r:
         return
@@ -1100,10 +1144,47 @@ async def on_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     except Exception:
         existing = []
     user_id = r.user.id if r.user else (r.actor_chat.id if r.actor_chat else None)
-    existing = [e for e in existing if e.get("user_id") != user_id]
+    # Drop only this user's existing per-user reactions; keep aggregated entries.
+    existing = [e for e in existing if e.get("user_id") != user_id or e.get("agg")]
     for n in new:
         n["user_id"] = user_id
         existing.append(n)
+    db.exec(
+        "UPDATE messages SET reactions_json=? WHERE chat_id=? AND message_id=?",
+        (json.dumps(existing, ensure_ascii=False), chat_id, msg_id),
+    )
+    await hub.broadcast(
+        {"type": "reaction", "chat_id": chat_id, "message_id": msg_id, "reactions": existing}
+    )
+
+
+async def on_reaction_count(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Anonymous aggregated reaction counts for large chats / non-admin bots.
+    Telegram delivers this instead of per-user reactions when the bot can't see
+    individual reactors."""
+    rc = update.message_reaction_count
+    if not rc:
+        return
+    chat_id = rc.chat.id
+    msg_id = rc.message_id
+    aggregated = []
+    for rcr in rc.reactions or []:
+        rt = getattr(rcr, "type", None)
+        count = int(getattr(rcr, "total_count", 0) or 0)
+        if count <= 0:
+            continue
+        if isinstance(rt, ReactionTypeEmoji):
+            aggregated.append({"type": "emoji", "emoji": rt.emoji, "count": count, "agg": True})
+        elif isinstance(rt, ReactionTypeCustomEmoji):
+            aggregated.append({"type": "custom", "custom_emoji_id": rt.custom_emoji_id, "count": count, "agg": True})
+    row = db.one("SELECT reactions_json FROM messages WHERE chat_id=? AND message_id=?", (chat_id, msg_id))
+    try:
+        existing = json.loads(row["reactions_json"]) if row and row["reactions_json"] else []
+    except Exception:
+        existing = []
+    # Keep only per-user entries; replace aggregated ones with fresh data.
+    existing = [e for e in existing if not e.get("agg")]
+    existing.extend(aggregated)
     db.exec(
         "UPDATE messages SET reactions_json=? WHERE chat_id=? AND message_id=?",
         (json.dumps(existing, ensure_ascii=False), chat_id, msg_id),
@@ -1741,6 +1822,33 @@ async def file_handler(request: web.Request) -> web.Response:
     return web.FileResponse(meta["local_path"])
 
 
+async def api_chat_photo(request: web.Request) -> web.Response:
+    """Lazy-load chat avatar (groups/channels). Uses cached photo_file_id;
+    if missing, calls bot.get_chat() to refresh it."""
+    bot: Bot = get_bot(request)
+    try:
+        chat_id = int(request.match_info["chat_id"])
+    except (TypeError, ValueError):
+        return web.Response(status=400)
+    row = db.one("SELECT photo_file_id FROM chats WHERE id=?", (chat_id,))
+    file_id: Optional[str] = row["photo_file_id"] if row and row["photo_file_id"] else None
+    if not file_id and bot:
+        try:
+            chat = await bot.get_chat(chat_id)
+            ph = getattr(chat, "photo", None)
+            if ph and getattr(ph, "big_file_id", None):
+                file_id = ph.big_file_id
+                db.exec("UPDATE chats SET photo_file_id=? WHERE id=?", (file_id, chat_id))
+        except TelegramError:
+            pass
+    if not file_id:
+        return web.Response(status=404)
+    meta = await cache_file(bot, file_id)
+    if meta and meta.get("local_path"):
+        return web.FileResponse(meta["local_path"])
+    return web.Response(status=404)
+
+
 async def api_audit(request: web.Request) -> web.Response:
     rows = db.query("SELECT * FROM audit_log ORDER BY id DESC LIMIT 200")
     return web.json_response([row_to_dict(r) for r in rows])
@@ -2147,7 +2255,8 @@ async def build_telegram_app() -> Application:
     app.add_handler(MessageHandler(filters.ALL & (~filters.UpdateType.EDITED), on_any_message))
     app.add_handler(MessageHandler(filters.UpdateType.EDITED, on_edited_message))
     app.add_handler(CallbackQueryHandler(on_callback))
-    app.add_handler(MessageReactionHandler(on_reaction))
+    app.add_handler(MessageReactionHandler(on_reaction, message_reaction_types=MessageReactionHandler.MESSAGE_REACTION_UPDATED))
+    app.add_handler(MessageReactionHandler(on_reaction_count, message_reaction_types=MessageReactionHandler.MESSAGE_REACTION_COUNT_UPDATED))
     app.add_handler(ChatMemberHandler(on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_handler(ChatMemberHandler(on_chat_member, ChatMemberHandler.CHAT_MEMBER))
     app.add_handler(PollHandler(on_poll))
@@ -2194,6 +2303,7 @@ async def run() -> None:
     web_app.router.add_delete("/api/mini_apps/{app_id}", api_mini_app_delete)
     web_app.router.add_get("/api/users", api_users)
     web_app.router.add_get("/api/users/{user_id}/photo", api_user_photo)
+    web_app.router.add_get("/api/chats/{chat_id}/photo", api_chat_photo)
     web_app.router.add_get("/api/users/{user_id}/profile", api_user_profile)
     web_app.router.add_get("/api/poll/{poll_id}/voters", api_poll_voters)
     web_app.router.add_post("/api/custom_emoji", api_custom_emoji)
@@ -2215,7 +2325,7 @@ async def run() -> None:
     # Pretty, hard-to-miss startup banner with the URL.
     banner_host = "localhost" if WEB_HOST in ("0.0.0.0", "::") else WEB_HOST
     log.info("-" * 72)
-    log.info("TG Studio запущен.")
+    log.info("TG Studio v4 запущен.")
     if AUTH_ENABLED:
         log.info("Откройте: http://%s:%s/?token=%s", banner_host, WEB_PORT, WEB_ACCESS_TOKEN)
         log.info("(с этого компьютера можно и просто http://%s:%s/ без токена)", banner_host, WEB_PORT)
@@ -2429,9 +2539,11 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
   position: relative;
   background: var(--tg-side);
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;  /* header / tabs / scrollable chat list */
   border-right: 1px solid var(--tg-divider);
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 .side-header {
   height: calc(var(--header-h) + var(--safe-t));
@@ -2487,7 +2599,7 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
   margin-left: 6px; padding: 0 5px;
 }
 
-.side-body { overflow-y: auto; }
+.side-body { overflow-y: auto; min-height: 0; }
 
 /* Chat row */
 .chat-row {
@@ -2513,9 +2625,10 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
 .chat-row-title {
   font-weight: 500; font-size: 15px;
   white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 6px;
   min-width: 0;
 }
+.chat-row-title > span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .chat-row-time {
   grid-column: 3; grid-row: 1;
   color: var(--tg-text-3); font-size: 12px;
@@ -2565,6 +2678,17 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
 .av-c7 { background: linear-gradient(135deg, #e0a2f3, #d669ed); }
 .av-c8 { background: linear-gradient(135deg, #b1c1f3, #7079ec); }
 
+/* Per-user name colors (mirrors avatar palette but as a solid foreground color).
+   Used on .bubble-name and .bubble-reply-name. */
+.nc-1 { color: #ff7e6c; }
+.nc-2 { color: #ffb961; }
+.nc-3 { color: #78a2ff; }
+.nc-4 { color: #7ddc7e; }
+.nc-5 { color: #4cd7c8; }
+.nc-6 { color: #4fb9f6; }
+.nc-7 { color: #d780eb; }
+.nc-8 { color: #8b95f0; }
+
 .badge-star {
   display: inline-block;
   background: linear-gradient(135deg, var(--tg-premium) 0%, var(--tg-premium-2) 100%);
@@ -2610,6 +2734,8 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
   grid-template-rows: auto 1fr auto;
   background: var(--tg-chat-bg);
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 .main:empty,
 .main.placeholder {
@@ -2644,7 +2770,7 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
 .chat-header-title {
   font-weight: 500; font-size: 15.5px;
   white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 6px;
 }
 .chat-header-status { font-size: 13px; color: var(--tg-text-3); white-space: nowrap; }
 .chat-header-status.online { color: var(--tg-accent); }
@@ -2659,9 +2785,10 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
   scroll-behavior: smooth;
   overscroll-behavior: contain;
   position: relative;
+  min-height: 0;
 }
 .msgs-inner {
-  display: flex; flex-direction: column-reverse;
+  display: flex; flex-direction: column;  /* normal order: oldest top, newest bottom */
   width: 100%;
   margin-top: auto;
   max-width: 720px;
@@ -2690,6 +2817,12 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
 .msg.in .avatar.s32 { margin-right: 8px; align-self: flex-end; }
 .msg-stack { display: grid; grid-template-columns: 1fr; gap: 1px; max-width: 78%; }
 .msg.out .msg-stack { align-items: flex-end; }
+/* Add visible breathing room between consecutive different senders */
+.msg.first-of-stack { padding-top: 10px; }
+.msg.last-of-stack { padding-bottom: 2px; }
+/* When the row is the LAST of a stack but the next sender is different, give
+   a bit more space before the next stack starts. */
+.msg + .msg.first-of-stack { margin-top: 2px; }
 
 .bubble {
   position: relative;
@@ -2725,10 +2858,22 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
 
 .bubble-name {
   font-size: 13.5px; font-weight: 600;
+  /* Default color used only if no .nc-N class is set. */
   color: var(--tg-accent);
   display: flex; align-items: center; gap: 4px;
   margin-bottom: 2px;
 }
+/* When a per-user color class is applied, it wins over the defaults. */
+.bubble-name.nc-1, .bubble-name.nc-2, .bubble-name.nc-3, .bubble-name.nc-4,
+.bubble-name.nc-5, .bubble-name.nc-6, .bubble-name.nc-7, .bubble-name.nc-8 { color: inherit; }
+.bubble-name.nc-1 { color: #ff7e6c; }
+.bubble-name.nc-2 { color: #ffb961; }
+.bubble-name.nc-3 { color: #78a2ff; }
+.bubble-name.nc-4 { color: #7ddc7e; }
+.bubble-name.nc-5 { color: #4cd7c8; }
+.bubble-name.nc-6 { color: #4fb9f6; }
+.bubble-name.nc-7 { color: #d780eb; }
+.bubble-name.nc-8 { color: #8b95f0; }
 .msg.out .bubble-name { color: #95c8ff; }
 .bubble-text { white-space: pre-wrap; word-break: break-word; }
 .bubble-text a { color: var(--tg-link); }
@@ -2826,9 +2971,42 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
   display: grid;
   grid-template-columns: 44px 1fr;
   gap: 10px; align-items: center;
-  min-width: 220px;
+  min-width: 240px;
 }
-.media-audio audio { width: 100%; }
+.media-audio audio { display: none; }  /* hidden — we drive playback ourselves */
+.media-audio .tg-player {
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 0;
+}
+.media-audio .tg-player-row {
+  display: flex; align-items: center; gap: 8px;
+}
+.media-audio .tg-player-progress {
+  flex: 1; height: 3px; background: rgba(255,255,255,.18);
+  border-radius: 2px; position: relative; cursor: pointer;
+  min-width: 80px;
+}
+.media-audio .tg-player-fill {
+  position: absolute; top: 0; left: 0; height: 100%;
+  background: var(--tg-accent); border-radius: 2px;
+  transition: width .15s linear;
+}
+.msg.out .media-audio .tg-player-fill { background: #fff; }
+.media-audio .tg-player-time {
+  font-size: 12px; color: var(--tg-text-2);
+  font-variant-numeric: tabular-nums;
+  min-width: 38px;
+}
+.msg.out .media-audio .tg-player-time { color: rgba(255,255,255,.78); }
+.media-audio .tg-player-name {
+  font-size: 13.5px; font-weight: 500; color: var(--tg-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.media-audio .media-doc-icon { cursor: pointer; }
+.media-audio .media-doc-icon.playing svg { transform: scale(.9); }
+.media-audio .media-doc-icon svg.icon-pause,
+.media-audio .media-doc-icon.playing svg.icon-play { display: none; }
+.media-audio .media-doc-icon.playing svg.icon-pause { display: block; }
 
 .media-voice {
   display: grid;
@@ -3587,8 +3765,60 @@ function avInitial(name) {
 }
 
 function avColor(id) {
+  return 'av-c' + nameColorIdx(id);
+}
+function nameColor(id) {
+  return 'nc-' + nameColorIdx(id);
+}
+function nameColorIdx(id) {
   const n = (typeof id === 'number') ? id : (id ? id.toString().split('').reduce((a, c) => a + c.charCodeAt(0), 0) : 0);
-  return 'av-c' + (((n % 8) + 8) % 8 + 1);
+  return ((n % 8) + 8) % 8 + 1;
+}
+
+// In-memory cache for avatar URLs we've already verified exist.
+// Maps "user:<id>"/"chat:<id>" -> url or null (404 / no photo).
+const _avatarCache = new Map();
+
+/**
+ * Render a Telegram-style avatar.
+ *   id     — entity id (negative for groups/channels, positive for users)
+ *   name   — display name (used for initial)
+ *   size   — '', 's32', 's40', 's96', 's120'
+ *   type   — 'user' | 'chat'  (default 'user'; chats use /api/chats/.../photo)
+ * Returns a div containing initials + gradient bg. Asynchronously fetches the
+ * real photo and swaps in an <img> when ready.
+ */
+function renderAvatar(id, name, size, type, extraOpts) {
+  type = type || 'user';
+  size = size || '';
+  const cls = 'avatar ' + (size ? size + ' ' : '') + avColor(id);
+  const div = ce('div', Object.assign({ class: cls }, extraOpts || {}), avInitial(name));
+  if (!id) return div;
+  const key = type + ':' + id;
+  // From cache
+  if (_avatarCache.has(key)) {
+    const url = _avatarCache.get(key);
+    if (url) {
+      const img = new Image();
+      img.src = url;
+      img.onload = () => { div.textContent = ''; div.appendChild(img); };
+    }
+    return div;
+  }
+  // Negative chat_id needs proper URL encoding.
+  const base = type === 'chat'
+    ? `/api/chats/${encodeURIComponent(id)}/photo`
+    : `/api/users/${encodeURIComponent(id)}/photo`;
+  const url = base + (TOKEN ? `?token=${encodeURIComponent(TOKEN)}` : '');
+  const probe = new Image();
+  probe.onload = () => {
+    _avatarCache.set(key, url);
+    div.textContent = '';
+    div.appendChild(probe);
+  };
+  probe.onerror = () => { _avatarCache.set(key, null); };
+  probe.src = url;
+  return div;
 }
 
 function fmtTime(ts) {
@@ -3664,6 +3894,7 @@ const SVG = {
   download:'<svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>',
   doc:     '<svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/></svg>',
   play:    '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
+  pause:   '<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>',
   mic:     '<svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5a3 3 0 0 0-6 0v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>',
   poll:    '<svg viewBox="0 0 24 24"><path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM7 10h2v7H7zm4-3h2v10h-2zm4 6h2v4h-2z"/></svg>',
   photo:   '<svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>',
@@ -3831,7 +4062,13 @@ function handleEvent(data) {
         } else {
           loadChats();
         }
-        if (state.current === p.chat_id) renderMessages();
+        if (state.current === p.chat_id) {
+          const s = $('#msgsScroll');
+          // Only auto-scroll to bottom if user was already near the bottom.
+          const wasAtBottom = !s || (s.scrollHeight - s.scrollTop - s.clientHeight < 80);
+          renderMessages();
+          if (wasAtBottom && s) requestAnimationFrame(() => { s.scrollTop = s.scrollHeight; });
+        }
       }
       break;
     }
@@ -3878,15 +4115,29 @@ function handleEvent(data) {
 
 // ============= 5. Sidebar =================================================
 
+let _loadChatsInflight = null;
+let _loadChatsQueued = false;
 async function loadChats() {
-  try {
-    const chats = await api('/api/chats');
-    state.chats.clear();
-    for (const c of chats) state.chats.set(c.id, c);
-    renderChatList();
-  } catch (e) {
-    console.error(e);
-  }
+  // Coalesce — many WS events can call us in a tight loop while the bot's
+  // initial chat list arrives. One in-flight + one queued is enough.
+  if (_loadChatsInflight) { _loadChatsQueued = true; return _loadChatsInflight; }
+  _loadChatsInflight = (async () => {
+    try {
+      const chats = await api('/api/chats');
+      state.chats.clear();
+      for (const c of chats) state.chats.set(c.id, c);
+      renderChatList();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      _loadChatsInflight = null;
+      if (_loadChatsQueued) {
+        _loadChatsQueued = false;
+        setTimeout(loadChats, 300);
+      }
+    }
+  })();
+  return _loadChatsInflight;
 }
 
 function chatRowPreview(c) {
@@ -3937,11 +4188,9 @@ function renderChatList() {
       class: 'chat-row' + (state.current === c.id ? ' active' : ''),
       onclick: () => openChat(c.id),
     });
-    row.appendChild(ce('div', {
-      class: 'avatar ' + avColor(c.id),
-    }, avInitial(c.title || c.username || String(c.id))));
+    row.appendChild(renderAvatar(c.id, c.title || c.username || String(c.id), '', c.type === 'private' ? 'user' : 'chat'));
     const top = ce('div', { class: 'chat-row-top' });
-    top.appendChild(ce('div', { class: 'chat-row-title' }, c.title || c.username || String(c.id), ...chatTags(c)));
+    top.appendChild(ce('div', { class: 'chat-row-title' }, ce('span', {}, c.title || c.username || String(c.id)), ...chatTags(c)));
     row.appendChild(top);
     if (c.last_message_at) row.appendChild(ce('div', { class: 'chat-row-time' }, fmtTime(c.last_message_at)));
     const prev = ce('div', { class: 'chat-row-preview' });
@@ -4033,9 +4282,9 @@ function renderChat() {
   const header = ce('header', { class: 'chat-header' });
   const backBtn = ce('button', { class: 'icon-btn', html: SVG.back, onclick: e => { e.stopPropagation(); closeChat(); } });
   if (window.innerWidth <= 768) header.appendChild(backBtn);
-  header.appendChild(ce('div', { class: 'avatar s40 ' + avColor(chat.id) }, avInitial(chat.title)));
+  header.appendChild(renderAvatar(chat.id, chat.title || String(chat.id), 's40', chat.type === 'private' ? 'user' : 'chat'));
   const meta = ce('div', { class: 'chat-header-meta' });
-  meta.appendChild(ce('div', { class: 'chat-header-title' }, chat.title || String(chat.id), ...chatTags(chat)));
+  meta.appendChild(ce('div', { class: 'chat-header-title' }, ce('span', {}, chat.title || String(chat.id)), ...chatTags(chat)));
   const statusText = chatStatus(chat);
   meta.appendChild(ce('div', { class: 'chat-header-status' }, statusText));
   header.appendChild(meta);
@@ -4105,7 +4354,7 @@ function renderMessages() {
   const inner = $('#msgsInner'); if (!inner) return;
   inner.innerHTML = '';
   const map = getMsgMap(state.current);
-  // Ordered ascending by date
+  // Ordered ascending by date — oldest at top, newest at bottom (normal chat order).
   const arr = Array.from(map.values()).sort((a, b) => a.date - b.date);
 
   // Group by media_group_id
@@ -4118,25 +4367,24 @@ function renderMessages() {
   }
   const renderedGroup = new Set();
 
-  // Walk in reverse (newest first), DOM goes column-reverse so first-pushed is bottom
-  let prevDay = null;
-  for (let i = arr.length - 1; i >= 0; i--) {
+  let prevDayKey = null;
+  for (let i = 0; i < arr.length; i++) {
     const m = arr[i];
+    // Day separator BEFORE first message of each day.
+    const dayKey = new Date(m.date * 1000).toDateString();
+    if (dayKey !== prevDayKey) {
+      inner.appendChild(ce('div', { class: 'date-sep' }, fmtDateHeading(m.date)));
+      prevDayKey = dayKey;
+    }
     if (m.media_group_id && renderedGroup.has(m.media_group_id)) continue;
     if (m.media_group_id) {
       renderedGroup.add(m.media_group_id);
       const all = groups.get(m.media_group_id).sort((a, b) => a.message_id - b.message_id);
       inner.appendChild(renderMessageGroup(all));
     } else {
-      const next = arr[i - 1];
-      const prev = arr[i + 1];
+      const prev = arr[i - 1];
+      const next = arr[i + 1];
       inner.appendChild(renderSingleMessage(m, prev, next));
-    }
-    // Day separator
-    const d = new Date(m.date * 1000).toDateString();
-    const nextEarlier = i > 0 ? arr[i - 1] : null;
-    if (!nextEarlier || new Date(nextEarlier.date * 1000).toDateString() !== d) {
-      inner.appendChild(ce('div', { class: 'date-sep' }, fmtDateHeading(m.date)));
     }
   }
 }
@@ -4150,15 +4398,17 @@ function renderSingleMessage(m, prev, next) {
   const sameSender = prev && prev.sender_id === m.sender_id && !prev.media_group_id && (m.date - prev.date) < 300;
   const sameSenderNext = next && next.sender_id === m.sender_id && !next.media_group_id && (next.date - m.date) < 300;
 
-  const row = ce('div', { class: 'msg ' + (out ? 'out' : 'in'), dataset: { mid: m.message_id } });
+  let cls = 'msg ' + (out ? 'out' : 'in');
+  if (!sameSender) cls += ' first-of-stack';
+  if (!sameSenderNext) cls += ' last-of-stack';
+  const row = ce('div', { class: cls, dataset: { mid: m.message_id } });
   row._msg = m;
 
   if (!out && !sameSenderNext) {
     const sender = state.users.get(m.sender_id) || {};
-    row.appendChild(ce('div', {
-      class: 'avatar s32 ' + avColor(m.sender_id),
+    row.appendChild(renderAvatar(m.sender_id, sender.first_name || sender.username || '?', 's32', 'user', {
       onclick: e => { e.stopPropagation(); openUserDrawer(m.sender_id); }
-    }, avInitial(sender.first_name || sender.username || '?')));
+    }));
   } else if (!out) {
     row.appendChild(ce('div', { class: 'avatar s32', style: { visibility: 'hidden' } }));
   }
@@ -4181,17 +4431,16 @@ function renderMessageGroup(msgs) {
   const row = ce('div', { class: 'msg ' + (out ? 'out' : 'in') });
   if (!out) {
     const sender = state.users.get(m.sender_id) || {};
-    row.appendChild(ce('div', {
-      class: 'avatar s32 ' + avColor(m.sender_id),
+    row.appendChild(renderAvatar(m.sender_id, sender.first_name || sender.username || '?', 's32', 'user', {
       onclick: e => { e.stopPropagation(); openUserDrawer(m.sender_id); }
-    }, avInitial(sender.first_name || sender.username || '?')));
+    }));
   }
   const stack = ce('div', { class: 'msg-stack' });
   const bubble = ce('div', { class: 'bubble' + (msgs.some(x => x.media_type === 'document') ? '' : ' media-only') });
   if (!out && (msgs[0].caption || msgs[0].text)) {
     // sender label
     const sender = state.users.get(m.sender_id) || {};
-    const nameRow = ce('div', { class: 'bubble-name' }, sender.first_name || sender.username || '');
+    const nameRow = ce('div', { class: 'bubble-name ' + nameColor(m.sender_id) }, sender.first_name || sender.username || '');
     if (sender.is_premium) nameRow.appendChild(ce('span', { class: 'badge-star' }, '★'));
     bubble.appendChild(nameRow);
   }
@@ -4246,7 +4495,7 @@ function renderBubble(m, { out, sameSender, sameSenderNext }) {
     const c = state.chats.get(state.current);
     if (c && c.type !== 'private') {
       const sender = state.users.get(m.sender_id) || {};
-      const nameRow = ce('div', { class: 'bubble-name' }, sender.first_name || sender.username || '');
+      const nameRow = ce('div', { class: 'bubble-name ' + nameColor(m.sender_id) }, sender.first_name || sender.username || '');
       if (sender.is_premium) nameRow.appendChild(ce('span', { class: 'badge-star' }, '★'));
       bubble.appendChild(nameRow);
     }
@@ -4260,7 +4509,7 @@ function renderBubble(m, { out, sameSender, sameSenderNext }) {
       class: 'bubble-reply',
       onclick: e => { e.stopPropagation(); scrollToMessage(m.reply_to_message_id); }
     },
-      ce('div', { class: 'bubble-reply-name' }, repSender ? (repSender.first_name || repSender.username || '') : 'Сообщение'),
+      ce('div', { class: 'bubble-reply-name ' + nameColor(repSender ? (repSender.id || rep?.sender_id || 0) : (rep?.sender_id || 0)) }, repSender ? (repSender.first_name || repSender.username || '') : 'Сообщение'),
       ce('div', { class: 'bubble-reply-text' }, rep ? ((rep.text || rep.caption || mediaLabel(rep) || '').slice(0, 80)) : '...'),
     ));
   }
@@ -4372,11 +4621,63 @@ function renderDocBlock(m) {
 
 function renderAudioBlock(m, url) {
   const wrap = ce('div', { class: 'media-audio' });
-  wrap.appendChild(ce('div', { class: 'media-doc-icon', html: m.media_type === 'voice' ? SVG.mic : SVG.play }));
-  const info = ce('div');
-  info.appendChild(ce('audio', { controls: 'controls', src: url, preload: 'metadata', style: { width: '220px' } }));
-  if (m.media_type === 'audio' && m.file_name) info.appendChild(ce('div', { class: 'media-doc-meta' }, m.file_name));
-  wrap.appendChild(info);
+  const icon = ce('div', { class: 'media-doc-icon' });
+  // Two SVGs; CSS toggles which one is visible based on .playing.
+  const playSvg = document.createElement('span');
+  playSvg.innerHTML = SVG.play; playSvg.firstChild.classList.add('icon-play');
+  const pauseSvg = document.createElement('span');
+  pauseSvg.innerHTML = SVG.pause; pauseSvg.firstChild.classList.add('icon-pause');
+  icon.appendChild(playSvg.firstChild);
+  icon.appendChild(pauseSvg.firstChild);
+
+  const player = ce('div', { class: 'tg-player' });
+  if (m.media_type === 'audio' && m.file_name) {
+    player.appendChild(ce('div', { class: 'tg-player-name' }, m.file_name));
+  } else if (m.media_type === 'voice') {
+    player.appendChild(ce('div', { class: 'tg-player-name' }, 'Голосовое сообщение'));
+  }
+  const row = ce('div', { class: 'tg-player-row' });
+  const progress = ce('div', { class: 'tg-player-progress' });
+  const fill = ce('div', { class: 'tg-player-fill', style: { width: '0%' } });
+  progress.appendChild(fill);
+  const time = ce('div', { class: 'tg-player-time' }, '0:00');
+  row.append(progress, time);
+  player.appendChild(row);
+
+  const audio = ce('audio', { src: url, preload: 'metadata' });
+  wrap.append(icon, player, audio);
+
+  const fmt = (s) => {
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60), x = Math.floor(s % 60);
+    return m + ':' + String(x).padStart(2, '0');
+  };
+  const toggle = (e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    // Pause any other audio currently playing.
+    document.querySelectorAll('.media-audio audio').forEach(a => { if (a !== audio && !a.paused) a.pause(); });
+    if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+  };
+  icon.onclick = toggle;
+  audio.onplay = () => icon.classList.add('playing');
+  audio.onpause = () => icon.classList.remove('playing');
+  audio.onended = () => { icon.classList.remove('playing'); fill.style.width = '0%'; time.textContent = fmt(audio.duration || m.duration || 0); };
+  audio.onloadedmetadata = () => { time.textContent = fmt(audio.duration || m.duration || 0); };
+  audio.ontimeupdate = () => {
+    const d = audio.duration || m.duration || 0;
+    fill.style.width = (d > 0 ? (audio.currentTime / d * 100) : 0) + '%';
+    time.textContent = fmt(d > 0 ? d - audio.currentTime : 0);
+  };
+  progress.onclick = (e) => {
+    const rect = progress.getBoundingClientRect();
+    const r = (e.clientX - rect.left) / rect.width;
+    const d = audio.duration || 0;
+    if (d > 0) audio.currentTime = r * d;
+  };
+  // Replace play icon with mic for voice messages.
+  if (m.media_type === 'voice') {
+    icon.querySelector('.icon-play').innerHTML = SVG.mic.match(/<path[^/]*\/>/)[0];
+  }
   return wrap;
 }
 
@@ -4435,19 +4736,27 @@ function renderInlineKeyboard(m) {
 
 function renderReactions(m) {
   const wrap = ce('div', { class: 'reactions' });
-  // Aggregate by emoji
+  // Aggregate by emoji. Reactions array may contain a mix of per-user entries
+  // (one row per reactor) and aggregated entries (one row with a count).
   const counts = {};
+  const customByEmoji = {};
   let myEmoji = null;
   for (const r of m.reactions || []) {
-    const em = r.type === 'emoji' ? r.emoji : (r.type === 'custom_emoji' ? '★' : '?');
-    counts[em] = (counts[em] || 0) + 1;
-    if (r.user_id === state.me?.id) myEmoji = em;
+    let em;
+    if (r.type === 'emoji') em = r.emoji;
+    else if (r.type === 'custom' || r.type === 'custom_emoji') {
+      em = '⭐';  // placeholder, lazy-replaced by getCustomEmojiStickers
+      if (r.custom_emoji_id) customByEmoji[em] = r.custom_emoji_id;
+    } else em = '?';
+    const inc = r.agg ? (r.count || 1) : 1;
+    counts[em] = (counts[em] || 0) + inc;
+    if (!r.agg && r.user_id === state.me?.id) myEmoji = em;
   }
   for (const [em, n] of Object.entries(counts)) {
     wrap.appendChild(ce('div', {
       class: 'reaction' + (em === myEmoji ? ' me' : ''),
       onclick: e => { e.stopPropagation(); setReaction(m, em === myEmoji ? null : em); },
-    }, ce('span', { class: 'em' }, em), n > 1 ? String(n) : ''));
+    }, ce('span', { class: 'em' }, em), n > 0 ? String(n) : ''));
   }
   return wrap;
 }
@@ -4661,7 +4970,7 @@ function openForwardModal(m) {
       } catch (e) { toast('Ошибка: ' + e.message); }
       back.remove();
     }});
-    item.appendChild(ce('div', { class: 'avatar s40 ' + avColor(c.id) }, avInitial(c.title)));
+    item.appendChild(renderAvatar(c.id, c.title || String(c.id), 's40', c.type === 'private' ? 'user' : 'chat'));
     item.appendChild(ce('div', {}, ce('div', { style: { fontSize: '14px' } }, c.title || String(c.id)), ce('div', { style: { fontSize: '12px', color: 'var(--tg-text-3)' } }, chatStatus(c))));
     list.appendChild(item);
   }
@@ -5123,7 +5432,7 @@ async function loadProfilePage(page) {
     }
     body.appendChild(ce('div', { class: 'page-section' },
       ce('div', { style: 'display:flex; align-items:center; gap:14px; padding:8px 0' },
-        ce('div', { class: 'avatar s96 ' + avColor(me.id) }, avInitial(me.first_name)),
+        renderAvatar(me.id, me.first_name || '?', 's96', 'user'),
         ce('div', {},
           ce('div', { style: 'font-size:18px; font-weight:600' }, me.first_name + ' ' + (me.last_name || ''),
             ce('span', { class: 'tag-bot' }, 'BOT')),
@@ -5518,7 +5827,7 @@ async function loadPollVoters(pollId) {
     if (!voters.length) { list.appendChild(ce('div', { class: 'desc', style: 'padding:14px' }, 'Пока никто не голосовал, либо опрос анонимный и API не отдаёт имена.')); return; }
     for (const v of voters) {
       const it = ce('div', { class: 'item' });
-      it.appendChild(ce('div', { class: 'avatar s40 ' + avColor(v.user_id) }, avInitial(v.first_name || v.username || '?')));
+      it.appendChild(renderAvatar(v.user_id, v.first_name || v.username || '?', 's40', 'user'));
       const meta = ce('div', { class: 'flex' });
       meta.appendChild(ce('div', { style: 'font-size:14.5px; display:flex; align-items:center; gap:4px' },
         (v.first_name || '') + ' ' + (v.last_name || ''),
@@ -5561,7 +5870,7 @@ async function openAdminsList(chatId) {
     const list = ce('div', { class: 'user-list' });
     for (const a of admins) {
       const it = ce('div', { class: 'item', onclick: () => { back.remove(); openUserDrawer(a.user_id); } });
-      it.appendChild(ce('div', { class: 'avatar s40 ' + avColor(a.user_id) }, avInitial(a.first_name || a.username || '?')));
+      it.appendChild(renderAvatar(a.user_id, a.first_name || a.username || '?', 's40', 'user'));
       const meta = ce('div', {});
       meta.appendChild(ce('div', { style: 'font-size:14.5px; display:flex; align-items:center; gap:4px' },
         (a.first_name || '') + ' ' + (a.last_name || ''),
