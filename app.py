@@ -284,6 +284,24 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
 
+class _SuppressConflictTraceback(logging.Filter):
+    """Hide telegram.ext.Updater's noisy 'Conflict' traceback (we print a short
+    Russian explanation via our own error handler instead)."""
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "Conflict" in msg or "terminated by other getUpdates" in msg:
+            return False
+        if record.exc_info:
+            exc = record.exc_info[1]
+            if exc and "Conflict" in str(type(exc)):
+                return False
+        return True
+
+
+logging.getLogger("telegram.ext.Updater").addFilter(_SuppressConflictTraceback())
+logging.getLogger("telegram.ext").addFilter(_SuppressConflictTraceback())
+
+
 # ============================================================================
 # Database
 # ============================================================================
@@ -2261,7 +2279,33 @@ async def build_telegram_app() -> Application:
     app.add_handler(ChatMemberHandler(on_chat_member, ChatMemberHandler.CHAT_MEMBER))
     app.add_handler(PollHandler(on_poll))
     app.add_handler(PollAnswerHandler(on_poll_answer))
+    app.add_error_handler(on_telegram_error)
     return app
+
+
+_CONFLICT_WARNED = False
+
+
+async def on_telegram_error(update, context) -> None:
+    """Friendly logging for Telegram errors. Suppresses noisy tracebacks for
+    Conflict errors and prints a short Russian explanation instead."""
+    global _CONFLICT_WARNED
+    err = context.error
+    from telegram.error import Conflict, NetworkError, TimedOut
+    if isinstance(err, Conflict):
+        if not _CONFLICT_WARNED:
+            log.error("=" * 72)
+            log.error("Telegram отклонил getUpdates: уже подключён другой инстанс этого бота.")
+            log.error("Решение: остановите все другие копии бота (другой telegram-сервер,")
+            log.error("другой компьютер, ваша VPS, и т. д.) и перезапустите этот процесс.")
+            log.error("Token: ...%s (на всякий случай, чтобы вы понимали о каком боте речь)", TG_BOT_TOKEN[-6:] if TG_BOT_TOKEN else "?")
+            log.error("=" * 72)
+            _CONFLICT_WARNED = True
+        return
+    if isinstance(err, (NetworkError, TimedOut)):
+        log.warning("Telegram сеть: %s", err)
+        return
+    log.exception("Ошибка в боте: %s", err)
 
 
 async def run() -> None:
