@@ -26,7 +26,22 @@ const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 const TOKEN_KEY = 'tgstudio.token';
-let TOKEN = localStorage.getItem(TOKEN_KEY) || '';
+// Boot order for the token:
+//  1. ?token=... in the URL (after a successful boot we strip it),
+//  2. localStorage value from a previous session.
+let TOKEN = (() => {
+  try {
+    const u = new URL(location.href);
+    const fromUrl = u.searchParams.get('token');
+    if (fromUrl) {
+      localStorage.setItem(TOKEN_KEY, fromUrl);
+      u.searchParams.delete('token');
+      history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash);
+      return fromUrl;
+    }
+  } catch (e) { /* noop */ }
+  return localStorage.getItem(TOKEN_KEY) || '';
+})();
 
 function ce(tag, props = {}, ...children) {
   const el = document.createElement(tag);
@@ -156,28 +171,57 @@ const SVG = {
 // ============= 1. Auth gate ================================================
 
 async function showGate() {
+  // First: try a no-token auth probe. Server trusts loopback and will hand
+  // back the real token, so on localhost the gate is skipped entirely.
+  try {
+    const probe = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    if (probe.ok) {
+      const j = await probe.json().catch(() => ({}));
+      if (j && j.token) {
+        TOKEN = j.token;
+        localStorage.setItem(TOKEN_KEY, TOKEN);
+        $('#gate').hidden = true;
+        $('#app').hidden = false;
+        return;
+      }
+    }
+  } catch (e) { /* fall through to interactive gate */ }
+
   $('#gate').hidden = false;
   $('#app').hidden = true;
+  const err = $('#tokErr');
+  if (err) { err.hidden = true; err.textContent = ''; }
   $('#tokInp').value = '';
   $('#tokInp').focus();
   return new Promise(resolve => {
     const submit = async () => {
       const v = $('#tokInp').value.trim();
       if (!v) return;
+      if (err) { err.hidden = true; err.textContent = ''; }
       try {
         const r = await fetch('/api/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: v }),
         });
-        if (!r.ok) throw new Error('invalid');
-        TOKEN = v;
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          let msg = 'Неверный пароль админ-панели.';
+          if (j && j.hint) msg = j.hint;
+          if (err) { err.textContent = msg; err.hidden = false; }
+          return;
+        }
+        TOKEN = (j && j.token) || v;
         localStorage.setItem(TOKEN_KEY, TOKEN);
         $('#gate').hidden = true;
         $('#app').hidden = false;
         resolve();
       } catch (e) {
-        toast('Неверный токен');
+        if (err) { err.textContent = 'Ошибка сети. Попробуйте ещё раз.'; err.hidden = false; }
       }
     };
     $('#tokBtn').onclick = submit;
@@ -2035,7 +2079,7 @@ if ('serviceWorker' in navigator) {
 async function boot() {
   if (!TOKEN) await showGate();
   else {
-    try { await api('/api/me'); }
+    try { await api('/api/me'); $('#gate').hidden = true; $('#app').hidden = false; }
     catch { localStorage.removeItem(TOKEN_KEY); TOKEN = ''; await showGate(); }
   }
   document.title = 'TG Studio';

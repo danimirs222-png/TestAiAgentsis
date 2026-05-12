@@ -114,6 +114,7 @@ DEFAULT_ENV = """\
 # After editing, restart the app.
 
 # --- Telegram bot ---
+# Токен бота из @BotFather (формата 1234567890:AA...).
 TG_BOT_TOKEN=
 TG_OWNER_ID=
 TG_CHANNEL_ID=
@@ -122,8 +123,12 @@ TG_OWNER_USERNAME=
 # --- Web app ---
 WEB_HOST=0.0.0.0
 WEB_PORT=8080
-# Случайно сгенерируйте или впишите свой — этот токен защищает админ-панель.
-WEB_ACCESS_TOKEN=changeme-please
+# !!! ЭТО НЕ ТОКЕН БОТА !!!
+# Это просто пароль на вход в админ-панель в браузере.
+# Можно придумать любой (любая строка). Если оставить пустым —
+# программа сгенерирует случайный и впишет сюда сама при первом запуске.
+# С localhost (127.0.0.1) вход без пароля разрешён всегда.
+WEB_ACCESS_TOKEN=
 
 # --- OpenRouter (заполните те ключи, что есть; можно частично) ---
 OPENROUTER_KEY_1=
@@ -146,15 +151,23 @@ AI_DEFAULT_MODEL=qwen/qwen3-next-80b-a3b-instruct:free
 
 def load_env() -> None:
     """Minimal .env loader (no external dependency)."""
+    import secrets as _secrets
     env_file = ROOT / ".env"
     if not env_file.exists():
-        # Create a template so the user knows what to fill in.
-        env_file.write_text(DEFAULT_ENV, "utf-8")
-        print(
-            f"[tgstudio] Создан шаблон {env_file}. Откройте его, впишите хотя бы TG_BOT_TOKEN,\n"
-            "           и запустите программу снова. WEB_ACCESS_TOKEN тоже стоит поменять."
+        # Pre-generate WEB_ACCESS_TOKEN so the user doesn't need to invent one.
+        gen = _secrets.token_urlsafe(16)
+        env_file.write_text(
+            DEFAULT_ENV.replace("WEB_ACCESS_TOKEN=", f"WEB_ACCESS_TOKEN={gen}"),
+            "utf-8",
         )
-        return
+        print(
+            f"[tgstudio] Создан шаблон {env_file}.\n"
+            f"           Впишите туда TG_BOT_TOKEN (токен бота из @BotFather),\n"
+            f"           чтобы бот заработал. Web-UI запустится и без него (но без чатов).\n"
+            f"           Пароль админ-панели сгенерирован автоматически: {gen}"
+        )
+        # Don't return — fall through and load the freshly-written file so the
+        # current process boots normally with the just-generated token.
     for raw in env_file.read_text("utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -163,6 +176,27 @@ def load_env() -> None:
         key = key.strip()
         val = val.strip().strip('"').strip("'")
         os.environ.setdefault(key, val)
+    # If WEB_ACCESS_TOKEN is missing/empty/insecure-default, generate one and
+    # persist it back to .env so the value is stable across restarts.
+    current = os.environ.get("WEB_ACCESS_TOKEN", "").strip()
+    if not current or current in ("changeme-please", "changeme", "please-change-me"):
+        gen = _secrets.token_urlsafe(16)
+        os.environ["WEB_ACCESS_TOKEN"] = gen
+        try:
+            txt = env_file.read_text("utf-8")
+            if "WEB_ACCESS_TOKEN=" in txt:
+                lines = []
+                for raw in txt.splitlines():
+                    if raw.strip().startswith("WEB_ACCESS_TOKEN="):
+                        lines.append(f"WEB_ACCESS_TOKEN={gen}")
+                    else:
+                        lines.append(raw)
+                env_file.write_text("\n".join(lines) + ("\n" if txt.endswith("\n") else ""), "utf-8")
+            else:
+                env_file.write_text(txt + f"\nWEB_ACCESS_TOKEN={gen}\n", "utf-8")
+            print(f"[tgstudio] Сгенерирован новый WEB_ACCESS_TOKEN и записан в {env_file}: {gen}")
+        except OSError as e:
+            print(f"[tgstudio] Не смог записать .env ({e}); токен будет использоваться только в этой сессии: {gen}")
 
 
 load_env()
@@ -178,7 +212,7 @@ TG_CHANNEL_ID = int(env("TG_CHANNEL_ID", "0") or 0)
 TG_OWNER_USERNAME = env("TG_OWNER_USERNAME")
 WEB_HOST = env("WEB_HOST", "0.0.0.0")
 WEB_PORT = int(env("WEB_PORT", "8080"))
-WEB_ACCESS_TOKEN = env("WEB_ACCESS_TOKEN", "changeme-please")
+WEB_ACCESS_TOKEN = env("WEB_ACCESS_TOKEN", "")
 AI_DEFAULT_MODEL = env("AI_DEFAULT_MODEL", "qwen/qwen3-next-80b-a3b-instruct:free")
 
 OPENROUTER_KEYS: list[str] = [
@@ -1244,11 +1278,30 @@ async def openrouter_image(model_id: str, prompt: str) -> dict[str, Any]:
 # ============================================================================
 
 
+LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _is_loopback(request: web.Request) -> bool:
+    peer = request.transport.get_extra_info("peername") if request.transport else None
+    if peer:
+        host = peer[0]
+        # Strip IPv4-mapped IPv6 prefix
+        if host.startswith("::ffff:"):
+            host = host[7:]
+        if host in LOOPBACK_HOSTS:
+            return True
+    return False
+
+
 @web.middleware
 async def auth_mw(request: web.Request, handler: Any) -> web.StreamResponse:
     path = request.path
     # Allow static assets, root index, ws upgrade (handled inside)
     if path.startswith(("/api/auth", "/ws", "/file/", "/static/", "/favicon", "/manifest", "/sw.js")) or path == "/" or path == "/index.html":
+        return await handler(request)
+    # Trust loopback — same pattern as Jupyter/devtools. The web UI is for
+    # local admin use; if you open it on the same machine, no password.
+    if _is_loopback(request):
         return await handler(request)
     token = request.cookies.get("token") or request.headers.get("X-Token") or request.query.get("token", "")
     if token != WEB_ACCESS_TOKEN:
@@ -1260,11 +1313,28 @@ def get_bot(request: web.Request) -> Bot:
     return request.app["bot"]
 
 
+_BOT_TOKEN_RE = re.compile(r"^\d{6,}:[A-Za-z0-9_-]{30,}$")
+
+
 async def api_auth(request: web.Request) -> web.Response:
+    # Loopback gets free pass — return the real token so the SPA can use it.
+    if _is_loopback(request):
+        resp = web.json_response({"ok": True, "token": WEB_ACCESS_TOKEN})
+        resp.set_cookie("token", WEB_ACCESS_TOKEN, max_age=60 * 60 * 24 * 30, samesite="Lax", httponly=False)
+        return resp
     data = await request.json()
-    if data.get("token") != WEB_ACCESS_TOKEN:
-        return web.json_response({"ok": False, "error": "Bad token"}, status=401)
-    resp = web.json_response({"ok": True})
+    submitted = (data.get("token") or "").strip()
+    if submitted != WEB_ACCESS_TOKEN:
+        # Helpful hint if the user pasted a Telegram bot token by mistake.
+        hint = None
+        if _BOT_TOKEN_RE.match(submitted):
+            hint = (
+                "Похоже, вы ввели TG_BOT_TOKEN (токен Telegram-бота). "
+                "Сюда нужен WEB_ACCESS_TOKEN — отдельный пароль на вход в админ-панель. "
+                "Его значение указано в файле .env рядом с app.py и печатается при старте программы в консоль."
+            )
+        return web.json_response({"ok": False, "error": "Bad token", "hint": hint}, status=401)
+    resp = web.json_response({"ok": True, "token": WEB_ACCESS_TOKEN})
     resp.set_cookie("token", WEB_ACCESS_TOKEN, max_age=60 * 60 * 24 * 30, samesite="Lax", httponly=False)
     return resp
 
@@ -2029,9 +2099,10 @@ async def api_send_media_group(request: web.Request) -> web.Response:
 
 
 async def ws_handler(request: web.Request) -> web.WebSocketResponse:
-    token = request.query.get("token", "")
-    if token != WEB_ACCESS_TOKEN:
-        return web.json_response({"error": "unauthorized"}, status=401)
+    if not _is_loopback(request):
+        token = request.query.get("token", "") or request.cookies.get("token", "")
+        if token != WEB_ACCESS_TOKEN:
+            return web.json_response({"error": "unauthorized"}, status=401)
     ws = web.WebSocketResponse(heartbeat=30)
     await ws.prepare(request)
     await hub.add(ws)
@@ -2155,7 +2226,14 @@ async def run() -> None:
     await runner.setup()
     site = web.TCPSite(runner, WEB_HOST, WEB_PORT)
     await site.start()
-    log.info("Web UI on http://%s:%s/?token=%s", WEB_HOST, WEB_PORT, WEB_ACCESS_TOKEN)
+    # Pretty, hard-to-miss startup banner with the URL.
+    banner_host = "localhost" if WEB_HOST in ("0.0.0.0", "::") else WEB_HOST
+    url = f"http://{banner_host}:{WEB_PORT}/?token={WEB_ACCESS_TOKEN}"
+    log.info("-" * 72)
+    log.info("TG Studio запущен.")
+    log.info("Откройте админ-панель: %s", url)
+    log.info("(с этого компьютера можно и просто http://%s:%s/ без токена)", banner_host, WEB_PORT)
+    log.info("-" * 72)
 
     if tg_app:
         await tg_app.start()
@@ -2329,7 +2407,12 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
 }
 .gate-logo svg { width: 44px; height: 44px; fill: white; }
 .gate h1 { font-size: 22px; text-align: center; margin: 0 0 8px; font-weight: 600; }
-.gate p  { color: var(--tg-text-2); text-align: center; margin: 0 0 24px; }
+.gate p  { color: var(--tg-text-2); text-align: center; margin: 0 0 16px; line-height: 1.45; }
+.gate .gate-sub  { font-size: 13px; margin-bottom: 18px; }
+.gate .gate-sub code { background: rgba(100,186,240,.10); padding: 1px 5px; border-radius: 4px; color: var(--tg-accent); }
+.gate .gate-warn { color: #f06c6c; font-size: 12px; }
+.gate .gate-hint { font-size: 12px; color: var(--tg-text-3, var(--tg-text-2)); margin: 14px 0 0; opacity: .8; }
+.gate-err { background: rgba(240,108,108,.12); color: #ff8585; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin: 0 0 12px; line-height: 1.4; }
 .gate input {
   width: 100%; background: var(--tg-bg-2); color: var(--tg-text);
   border: 1px solid #2c3845; padding: 14px 16px; border-radius: 10px;
@@ -3390,9 +3473,11 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
       <svg viewBox="0 0 240 240"><path d="M120 0C53.7 0 0 53.7 0 120s53.7 120 120 120 120-53.7 120-120S186.3 0 120 0zm59.1 76.8l-19.7 93.6c-1.5 6.8-5.4 8.4-11 5.2l-30.4-22.6-14.7 14.3c-1.6 1.6-3 3-6.2 3l2.2-31.1 56.2-50.8c2.4-2.2-.5-3.4-3.8-1.2L82 117.5l-30.6-9.6c-6.7-2.1-6.8-6.7 1.4-9.9l119.7-46.2c5.5-2 10.4 1.4 8.6 8z"/></svg>
     </div>
     <h1>TG Studio</h1>
-    <p>Введите токен доступа из <code>.env</code> (<code>WEB_ACCESS_TOKEN</code>)</p>
-    <input id="tokInp" type="password" placeholder="Токен" autocomplete="off">
+    <p class="gate-sub">Это пароль <b>WEB_ACCESS_TOKEN</b> из файла <code>.env</code> рядом с <code>app.py</code>.<br><span class="gate-warn">Это НЕ токен бота из @BotFather.</span></p>
+    <input id="tokInp" type="password" placeholder="WEB_ACCESS_TOKEN из .env" autocomplete="off">
+    <div id="tokErr" class="gate-err" hidden></div>
     <button class="primary" id="tokBtn">Войти</button>
+    <p class="gate-hint">При запуске программа печатает в консоль полную ссылку с уже подставленным токеном — её можно просто открыть.</p>
   </div>
 </div>
 
@@ -3463,7 +3548,22 @@ const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 const TOKEN_KEY = 'tgstudio.token';
-let TOKEN = localStorage.getItem(TOKEN_KEY) || '';
+// Boot order for the token:
+//  1. ?token=... in the URL (after a successful boot we strip it),
+//  2. localStorage value from a previous session.
+let TOKEN = (() => {
+  try {
+    const u = new URL(location.href);
+    const fromUrl = u.searchParams.get('token');
+    if (fromUrl) {
+      localStorage.setItem(TOKEN_KEY, fromUrl);
+      u.searchParams.delete('token');
+      history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash);
+      return fromUrl;
+    }
+  } catch (e) { /* noop */ }
+  return localStorage.getItem(TOKEN_KEY) || '';
+})();
 
 function ce(tag, props = {}, ...children) {
   const el = document.createElement(tag);
@@ -3593,28 +3693,57 @@ const SVG = {
 // ============= 1. Auth gate ================================================
 
 async function showGate() {
+  // First: try a no-token auth probe. Server trusts loopback and will hand
+  // back the real token, so on localhost the gate is skipped entirely.
+  try {
+    const probe = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    if (probe.ok) {
+      const j = await probe.json().catch(() => ({}));
+      if (j && j.token) {
+        TOKEN = j.token;
+        localStorage.setItem(TOKEN_KEY, TOKEN);
+        $('#gate').hidden = true;
+        $('#app').hidden = false;
+        return;
+      }
+    }
+  } catch (e) { /* fall through to interactive gate */ }
+
   $('#gate').hidden = false;
   $('#app').hidden = true;
+  const err = $('#tokErr');
+  if (err) { err.hidden = true; err.textContent = ''; }
   $('#tokInp').value = '';
   $('#tokInp').focus();
   return new Promise(resolve => {
     const submit = async () => {
       const v = $('#tokInp').value.trim();
       if (!v) return;
+      if (err) { err.hidden = true; err.textContent = ''; }
       try {
         const r = await fetch('/api/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: v }),
         });
-        if (!r.ok) throw new Error('invalid');
-        TOKEN = v;
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          let msg = 'Неверный пароль админ-панели.';
+          if (j && j.hint) msg = j.hint;
+          if (err) { err.textContent = msg; err.hidden = false; }
+          return;
+        }
+        TOKEN = (j && j.token) || v;
         localStorage.setItem(TOKEN_KEY, TOKEN);
         $('#gate').hidden = true;
         $('#app').hidden = false;
         resolve();
       } catch (e) {
-        toast('Неверный токен');
+        if (err) { err.textContent = 'Ошибка сети. Попробуйте ещё раз.'; err.hidden = false; }
       }
     };
     $('#tokBtn').onclick = submit;
@@ -5472,7 +5601,7 @@ if ('serviceWorker' in navigator) {
 async function boot() {
   if (!TOKEN) await showGate();
   else {
-    try { await api('/api/me'); }
+    try { await api('/api/me'); $('#gate').hidden = true; $('#app').hidden = false; }
     catch { localStorage.removeItem(TOKEN_KEY); TOKEN = ''; await showGate(); }
   }
   document.title = 'TG Studio';
