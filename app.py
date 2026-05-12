@@ -124,10 +124,9 @@ TG_OWNER_USERNAME=
 WEB_HOST=0.0.0.0
 WEB_PORT=8080
 # !!! ЭТО НЕ ТОКЕН БОТА !!!
-# Это просто пароль на вход в админ-панель в браузере.
-# Можно придумать любой (любая строка). Если оставить пустым —
-# программа сгенерирует случайный и впишет сюда сама при первом запуске.
-# С localhost (127.0.0.1) вход без пароля разрешён всегда.
+# Опциональный пароль на вход. По умолчанию пустой — и это ок:
+# при пустом значении вход в админ-панель без окна ввода токена.
+# Впишите любую строку, если хотите защитить доступ по локалке.
 WEB_ACCESS_TOKEN=
 
 # --- OpenRouter (заполните те ключи, что есть; можно частично) ---
@@ -154,20 +153,14 @@ def load_env() -> None:
     import secrets as _secrets
     env_file = ROOT / ".env"
     if not env_file.exists():
-        # Pre-generate WEB_ACCESS_TOKEN so the user doesn't need to invent one.
-        gen = _secrets.token_urlsafe(16)
-        env_file.write_text(
-            DEFAULT_ENV.replace("WEB_ACCESS_TOKEN=", f"WEB_ACCESS_TOKEN={gen}"),
-            "utf-8",
-        )
+        env_file.write_text(DEFAULT_ENV, "utf-8")
         print(
             f"[tgstudio] Создан шаблон {env_file}.\n"
             f"           Впишите туда TG_BOT_TOKEN (токен бота из @BotFather),\n"
-            f"           чтобы бот заработал. Web-UI запустится и без него (но без чатов).\n"
-            f"           Пароль админ-панели сгенерирован автоматически: {gen}"
+            f"           чтобы бот заработал. Web-UI запустится и без него (будет без чатов)."
         )
         # Don't return — fall through and load the freshly-written file so the
-        # current process boots normally with the just-generated token.
+        # current process boots normally.
     for raw in env_file.read_text("utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -176,27 +169,11 @@ def load_env() -> None:
         key = key.strip()
         val = val.strip().strip('"').strip("'")
         os.environ.setdefault(key, val)
-    # If WEB_ACCESS_TOKEN is missing/empty/insecure-default, generate one and
-    # persist it back to .env so the value is stable across restarts.
-    current = os.environ.get("WEB_ACCESS_TOKEN", "").strip()
-    if not current or current in ("changeme-please", "changeme", "please-change-me"):
-        gen = _secrets.token_urlsafe(16)
-        os.environ["WEB_ACCESS_TOKEN"] = gen
-        try:
-            txt = env_file.read_text("utf-8")
-            if "WEB_ACCESS_TOKEN=" in txt:
-                lines = []
-                for raw in txt.splitlines():
-                    if raw.strip().startswith("WEB_ACCESS_TOKEN="):
-                        lines.append(f"WEB_ACCESS_TOKEN={gen}")
-                    else:
-                        lines.append(raw)
-                env_file.write_text("\n".join(lines) + ("\n" if txt.endswith("\n") else ""), "utf-8")
-            else:
-                env_file.write_text(txt + f"\nWEB_ACCESS_TOKEN={gen}\n", "utf-8")
-            print(f"[tgstudio] Сгенерирован новый WEB_ACCESS_TOKEN и записан в {env_file}: {gen}")
-        except OSError as e:
-            print(f"[tgstudio] Не смог записать .env ({e}); токен будет использоваться только в этой сессии: {gen}")
+    # The "changeme-please" placeholder from earlier versions of .env should
+    # behave like no token at all (auth disabled). Drop it.
+    cur = os.environ.get("WEB_ACCESS_TOKEN", "").strip()
+    if cur in ("changeme-please", "changeme", "please-change-me"):
+        os.environ["WEB_ACCESS_TOKEN"] = ""
 
 
 load_env()
@@ -212,7 +189,9 @@ TG_CHANNEL_ID = int(env("TG_CHANNEL_ID", "0") or 0)
 TG_OWNER_USERNAME = env("TG_OWNER_USERNAME")
 WEB_HOST = env("WEB_HOST", "0.0.0.0")
 WEB_PORT = int(env("WEB_PORT", "8080"))
-WEB_ACCESS_TOKEN = env("WEB_ACCESS_TOKEN", "")
+WEB_ACCESS_TOKEN = env("WEB_ACCESS_TOKEN", "").strip()
+# Empty token == auth disabled for everyone (web UI is local-admin tool).
+AUTH_ENABLED = bool(WEB_ACCESS_TOKEN)
 AI_DEFAULT_MODEL = env("AI_DEFAULT_MODEL", "qwen/qwen3-next-80b-a3b-instruct:free")
 
 OPENROUTER_KEYS: list[str] = [
@@ -1295,6 +1274,9 @@ def _is_loopback(request: web.Request) -> bool:
 
 @web.middleware
 async def auth_mw(request: web.Request, handler: Any) -> web.StreamResponse:
+    # Auth disabled entirely (default).
+    if not AUTH_ENABLED:
+        return await handler(request)
     path = request.path
     # Allow static assets, root index, ws upgrade (handled inside)
     if path.startswith(("/api/auth", "/ws", "/file/", "/static/", "/favicon", "/manifest", "/sw.js")) or path == "/" or path == "/index.html":
@@ -1317,6 +1299,10 @@ _BOT_TOKEN_RE = re.compile(r"^\d{6,}:[A-Za-z0-9_-]{30,}$")
 
 
 async def api_auth(request: web.Request) -> web.Response:
+    # Auth disabled — always green-light.
+    if not AUTH_ENABLED:
+        resp = web.json_response({"ok": True, "token": "", "auth_required": False})
+        return resp
     # Loopback gets free pass — return the real token so the SPA can use it.
     if _is_loopback(request):
         resp = web.json_response({"ok": True, "token": WEB_ACCESS_TOKEN})
@@ -2099,7 +2085,7 @@ async def api_send_media_group(request: web.Request) -> web.Response:
 
 
 async def ws_handler(request: web.Request) -> web.WebSocketResponse:
-    if not _is_loopback(request):
+    if AUTH_ENABLED and not _is_loopback(request):
         token = request.query.get("token", "") or request.cookies.get("token", "")
         if token != WEB_ACCESS_TOKEN:
             return web.json_response({"error": "unauthorized"}, status=401)
@@ -2228,11 +2214,14 @@ async def run() -> None:
     await site.start()
     # Pretty, hard-to-miss startup banner with the URL.
     banner_host = "localhost" if WEB_HOST in ("0.0.0.0", "::") else WEB_HOST
-    url = f"http://{banner_host}:{WEB_PORT}/?token={WEB_ACCESS_TOKEN}"
     log.info("-" * 72)
     log.info("TG Studio запущен.")
-    log.info("Откройте админ-панель: %s", url)
-    log.info("(с этого компьютера можно и просто http://%s:%s/ без токена)", banner_host, WEB_PORT)
+    if AUTH_ENABLED:
+        log.info("Откройте: http://%s:%s/?token=%s", banner_host, WEB_PORT, WEB_ACCESS_TOKEN)
+        log.info("(с этого компьютера можно и просто http://%s:%s/ без токена)", banner_host, WEB_PORT)
+    else:
+        log.info("Откройте: http://%s:%s/", banner_host, WEB_PORT)
+        log.info("Авторизация выключена (WEB_ACCESS_TOKEN пустой в .env). Это ок для локального использования.")
     log.info("-" * 72)
 
     if tg_app:
@@ -3693,8 +3682,10 @@ const SVG = {
 // ============= 1. Auth gate ================================================
 
 async function showGate() {
-  // First: try a no-token auth probe. Server trusts loopback and will hand
-  // back the real token, so on localhost the gate is skipped entirely.
+  // First: try a no-token auth probe. Server returns ok:true if:
+  //  - AUTH_ENABLED is false in .env (default), or
+  //  - request is from loopback.
+  // In either case we skip the gate entirely.
   try {
     const probe = await fetch('/api/auth', {
       method: 'POST',
@@ -3703,9 +3694,9 @@ async function showGate() {
     });
     if (probe.ok) {
       const j = await probe.json().catch(() => ({}));
-      if (j && j.token) {
-        TOKEN = j.token;
-        localStorage.setItem(TOKEN_KEY, TOKEN);
+      if (j && j.ok) {
+        TOKEN = j.token || '';
+        if (TOKEN) localStorage.setItem(TOKEN_KEY, TOKEN);
         $('#gate').hidden = true;
         $('#app').hidden = false;
         return;

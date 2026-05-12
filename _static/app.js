@@ -171,8 +171,10 @@ const SVG = {
 // ============= 1. Auth gate ================================================
 
 async function showGate() {
-  // First: try a no-token auth probe. Server trusts loopback and will hand
-  // back the real token, so on localhost the gate is skipped entirely.
+  // First: try a no-token auth probe. Server returns ok:true if:
+  //  - AUTH_ENABLED is false in .env (default), or
+  //  - request is from loopback.
+  // In either case we skip the gate entirely.
   try {
     const probe = await fetch('/api/auth', {
       method: 'POST',
@@ -181,9 +183,9 @@ async function showGate() {
     });
     if (probe.ok) {
       const j = await probe.json().catch(() => ({}));
-      if (j && j.token) {
-        TOKEN = j.token;
-        localStorage.setItem(TOKEN_KEY, TOKEN);
+      if (j && j.ok) {
+        TOKEN = j.token || '';
+        if (TOKEN) localStorage.setItem(TOKEN_KEY, TOKEN);
         $('#gate').hidden = true;
         $('#app').hidden = false;
         return;
