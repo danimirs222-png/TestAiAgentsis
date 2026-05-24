@@ -1,0 +1,12 @@
+pack.name=TRMT — The Roads More Travelled
+pack.description=Mod de erosión portado de Java (milkucha). Caminar erosiona el terreno; restáuralo con polvo de hueso, brochas, azadas, palas o pociones de ligereza.
+effect.trmt.lightness=Ligereza
+item.trmt:potion_of_lightness.name=Poción de ligereza
+item.trmt:splash_potion_of_lightness.name=Poción arrojadiza de ligereza
+item.trmt:lingering_potion_of_lightness.name=Poción de larga duración de ligereza
+item.trmt:tipped_arrow_lightness.name=Flecha de ligereza
+tile.trmt:eroded_grass_block.name=Bloque de hierba erosionado
+tile.trmt:eroded_dirt.name=Tierra erosionada
+tile.trmt:eroded_coarse_dirt.name=Tierra tosca erosionada
+tile.trmt:eroded_sand.name=Arena erosionada
+trmt.actionbar.lightness=§eLightness §7%ds

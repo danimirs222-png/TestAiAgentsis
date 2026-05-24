@@ -1,0 +1,27 @@
+{
+  "resource_pack_name": "trmt",
+  "texture_name": "atlas.terrain",
+  "padding": 8,
+  "num_mip_levels": 4,
+  "texture_data": {
+    "trmt_eroded_dirt_0": { "textures": "textures/blocks/eroded_dirt_0" },
+    "trmt_eroded_dirt_1": { "textures": "textures/blocks/eroded_dirt_1" },
+    "trmt_eroded_dirt_2": { "textures": "textures/blocks/eroded_dirt_2" },
+    "trmt_eroded_sand_0": { "textures": "textures/blocks/eroded_sand_0" },
+    "trmt_eroded_sand_1": { "textures": "textures/blocks/eroded_sand_1" },
+    "trmt_eroded_sand_2": { "textures": "textures/blocks/eroded_sand_2" },
+    "trmt_eroded_sand_3": { "textures": "textures/blocks/eroded_sand_3" },
+    "trmt_eroded_sand_4": { "textures": "textures/blocks/eroded_sand_4" },
+    "trmt_eroded_grass_block_top_0": { "textures": "textures/blocks/eroded_grass_block_top_0" },
+    "trmt_eroded_grass_block_top_1": { "textures": "textures/blocks/eroded_grass_block_top_1" },
+    "trmt_eroded_grass_block_top_2": { "textures": "textures/blocks/eroded_grass_block_top_2" },
+    "trmt_eroded_grass_block_top_3": { "textures": "textures/blocks/eroded_grass_block_top_3" },
+    "trmt_eroded_grass_block_top_4": { "textures": "textures/blocks/eroded_grass_block_top_4" },
+    "trmt_eroded_grass_top_combined_0": { "textures": "textures/blocks/trmt_eroded_grass_top_combined_0" },
+    "trmt_eroded_grass_top_combined_1": { "textures": "textures/blocks/trmt_eroded_grass_top_combined_1" },
+    "trmt_eroded_grass_top_combined_2": { "textures": "textures/blocks/trmt_eroded_grass_top_combined_2" },
+    "trmt_eroded_grass_top_combined_3": { "textures": "textures/blocks/trmt_eroded_grass_top_combined_3" },
+    "trmt_eroded_grass_top_combined_4": { "textures": "textures/blocks/trmt_eroded_grass_top_combined_4" },
+    "trmt_grass_side_base": { "textures": "textures/blocks/trmt_grass_side_base" }
+  }
+}

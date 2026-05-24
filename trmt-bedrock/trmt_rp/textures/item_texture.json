@@ -1,0 +1,10 @@
+{
+  "resource_pack_name": "trmt",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "trmt_potion_lightness": { "textures": "textures/items/potion_lightness" },
+    "trmt_splash_potion_lightness": { "textures": "textures/items/splash_potion_lightness" },
+    "trmt_lingering_potion_lightness": { "textures": "textures/items/lingering_potion_lightness" },
+    "trmt_tipped_arrow_lightness": { "textures": "textures/items/tipped_arrow_lightness" }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "format_version": "1.21.40",
+  "minecraft:item": {
+    "description": {
+      "identifier": "trmt:potion_of_lightness",
+      "menu_category": {
+        "category": "items",
+        "group": "minecraft:itemGroup.name.potion"
+      }
+    },
+    "components": {
+      "minecraft:icon": "trmt_potion_lightness",
+      "minecraft:max_stack_size": 1,
+      "minecraft:use_animation": "drink",
+      "minecraft:use_modifiers": {
+        "use_duration": 1.6,
+        "movement_modifier": 0.35
+      },
+      "minecraft:food": {
+        "nutrition": 0,
+        "can_always_eat": true,
+        "saturation_modifier": 0
+      },
+      "minecraft:hand_equipped": true,
+      "minecraft:liquid_clipped": true,
+      "tag:trmt:lightness_potion": {}
+    }
+  }
+}

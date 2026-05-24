@@ -1,0 +1,28 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "pack.name",
+    "description": "pack.description",
+    "uuid": "ef7a7787-bedf-4419-81c2-e7daf18f91eb",
+    "version": [0, 5, 0],
+    "min_engine_version": [1, 21, 40]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "5dea866b-fbb5-4278-a582-6c514d3bdbbb",
+      "version": [0, 5, 0]
+    }
+  ],
+  "dependencies": [
+    {
+      "uuid": "bbd1ad8c-b2a4-423a-b21d-a7bfc05918a5",
+      "version": [0, 5, 0]
+    }
+  ],
+  "metadata": {
+    "authors": ["milkucha (Java original)", "Devin (Bedrock port)"],
+    "license": "CC-BY-NC-4.0",
+    "url": "https://github.com/milkucha/trmt"
+  }
+}

@@ -1,0 +1,12 @@
+pack.name=TRMT — The Roads More Travelled
+pack.description=Mod d'érosion porté depuis Java (milkucha). Marcher érode le terrain ; restaurez-le avec de la poudre d'os, des pinceaux, des houes, des pelles ou des potions de légèreté.
+effect.trmt.lightness=Légèreté
+item.trmt:potion_of_lightness.name=Potion de légèreté
+item.trmt:splash_potion_of_lightness.name=Potion jetable de légèreté
+item.trmt:lingering_potion_of_lightness.name=Potion persistante de légèreté
+item.trmt:tipped_arrow_lightness.name=Flèche de légèreté
+tile.trmt:eroded_grass_block.name=Bloc d'herbe érodé
+tile.trmt:eroded_dirt.name=Terre érodée
+tile.trmt:eroded_coarse_dirt.name=Terre grossière érodée
+tile.trmt:eroded_sand.name=Sable érodé
+trmt.actionbar.lightness=§eLightness §7%ds

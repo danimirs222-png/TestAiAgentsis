@@ -1,0 +1,10 @@
+{
+  "format_version": "1.21.40",
+  "minecraft:recipe_brewing_mix": {
+    "description": { "identifier": "trmt:brew_lightness" },
+    "tags": ["brewing_stand"],
+    "input": "minecraft:potion:4",
+    "reagent": "minecraft:feather",
+    "output": "trmt:potion_of_lightness"
+  }
+}

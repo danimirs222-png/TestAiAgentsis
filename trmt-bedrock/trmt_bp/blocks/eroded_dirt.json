@@ -1,0 +1,86 @@
+{
+  "format_version": "1.21.40",
+  "minecraft:block": {
+    "description": {
+      "identifier": "trmt:eroded_dirt",
+      "menu_category": {
+        "category": "nature",
+        "group": "minecraft:itemGroup.name.dirt"
+      },
+      "states": {
+        "trmt:stage": [0, 1, 2, 3],
+        "trmt:facing": ["south", "west", "north", "east"]
+      }
+    },
+    "components": {
+      "minecraft:destructible_by_mining": { "seconds_to_destroy": 0.75 },
+      "minecraft:destructible_by_explosion": { "explosion_resistance": 0.5 },
+      "minecraft:friction": 0.6,
+      "minecraft:map_color": "#866043",
+      "minecraft:light_dampening": 15,
+      "minecraft:geometry": "minecraft:geometry.full_block",
+      "minecraft:material_instances": {
+        "*": { "texture": "dirt", "render_method": "opaque" }
+      },
+      "minecraft:loot": "loot_tables/blocks/eroded_dirt.json",
+      "minecraft:transformation": {
+        "rotation": [0, 0, 0]
+      },
+      "minecraft:selection_box": {
+        "origin": [-8, 0, -8],
+        "size": [16, 16, 16]
+      },
+      "minecraft:collision_box": {
+        "origin": [-8, 0, -8],
+        "size": [16, 16, 16]
+      },
+      "tag:trmt:eroded": {},
+      "tag:dirt": {},
+      "tag:shovel_diggable": {}
+    },
+    "permutations": [
+      {
+        "condition": "q.block_state('trmt:facing') == 'west'",
+        "components": {
+          "minecraft:transformation": { "rotation": [0, 90, 0] }
+        }
+      },
+      {
+        "condition": "q.block_state('trmt:facing') == 'north'",
+        "components": {
+          "minecraft:transformation": { "rotation": [0, 180, 0] }
+        }
+      },
+      {
+        "condition": "q.block_state('trmt:facing') == 'east'",
+        "components": {
+          "minecraft:transformation": { "rotation": [0, 270, 0] }
+        }
+      },
+      {
+        "condition": "q.block_state('trmt:stage') == 1",
+        "components": {
+          "minecraft:material_instances": {
+            "*": { "texture": "trmt_eroded_dirt_0", "render_method": "opaque" }
+          }
+        }
+      },
+      {
+        "condition": "q.block_state('trmt:stage') == 2",
+        "components": {
+          "minecraft:material_instances": {
+            "*": { "texture": "trmt_eroded_dirt_1", "render_method": "opaque" }
+          }
+        }
+      },
+      {
+        "condition": "q.block_state('trmt:stage') == 3",
+        "components": {
+          "minecraft:material_instances": {
+            "*": { "texture": "trmt_eroded_dirt_2", "render_method": "opaque" }
+          }
+        }
+      }
+    ]
+  }
+}

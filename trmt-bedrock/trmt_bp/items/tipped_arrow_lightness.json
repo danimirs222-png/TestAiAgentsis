@@ -1,0 +1,19 @@
+{
+  "format_version": "1.21.40",
+  "minecraft:item": {
+    "description": {
+      "identifier": "trmt:tipped_arrow_lightness",
+      "menu_category": {
+        "category": "equipment",
+        "group": "minecraft:itemGroup.name.arrow"
+      }
+    },
+    "components": {
+      "minecraft:icon": "trmt_tipped_arrow_lightness",
+      "minecraft:max_stack_size": 64,
+      "minecraft:hand_equipped": true,
+      "tag:minecraft:is_projectile": {},
+      "tag:trmt:lightness_arrow": {}
+    }
+  }
+}

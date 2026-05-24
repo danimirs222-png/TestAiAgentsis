@@ -1,0 +1,12 @@
+pack.name=TRMT — The Roads More Travelled
+pack.description=Java版から移植された侵食モッド（milkucha製）。歩行で地形が侵食される。骨粉、ハケ、クワ、シャベル、または軽さのポーションで復元可能。
+effect.trmt.lightness=軽さ
+item.trmt:potion_of_lightness.name=軽さのポーション
+item.trmt:splash_potion_of_lightness.name=軽さのスプラッシュポーション
+item.trmt:lingering_potion_of_lightness.name=軽さの残留ポーション
+item.trmt:tipped_arrow_lightness.name=軽さの矢
+tile.trmt:eroded_grass_block.name=侵食された草ブロック
+tile.trmt:eroded_dirt.name=侵食された土
+tile.trmt:eroded_coarse_dirt.name=侵食された砂利交じりの土
+tile.trmt:eroded_sand.name=侵食された砂
+trmt.actionbar.lightness=§eLightness §7%ds

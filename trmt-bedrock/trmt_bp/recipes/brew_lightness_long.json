@@ -1,0 +1,10 @@
+{
+  "format_version": "1.21.40",
+  "minecraft:recipe_brewing_mix": {
+    "description": { "identifier": "trmt:brew_lightness_long" },
+    "tags": ["brewing_stand"],
+    "input": "trmt:potion_of_lightness",
+    "reagent": "minecraft:redstone",
+    "output": "trmt:long_potion_of_lightness"
+  }
+}

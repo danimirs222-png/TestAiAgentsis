@@ -1,0 +1,10 @@
+{
+  "format_version": "1.21.40",
+  "minecraft:recipe_brewing_mix": {
+    "description": { "identifier": "trmt:brew_lightness_lingering" },
+    "tags": ["brewing_stand"],
+    "input": "trmt:splash_potion_of_lightness",
+    "reagent": "minecraft:dragon_breath",
+    "output": "trmt:lingering_potion_of_lightness"
+  }
+}

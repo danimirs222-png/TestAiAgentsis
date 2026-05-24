@@ -1,0 +1,8 @@
+pack.name=TRMT — Дороги Истоптанные
+pack.description=Мод эрозии, портирован с Java (milkucha). Ходьба разрушает рельеф; восстановите его костной мукой, метлой, мотыгой, лопатой или зельем лёгкости.
+trmt.effect.lightness=Лёгкость
+trmt.button.download_update=Скачать обновление мода
+trmt.disconnect.outdated=Версия клиента The Roads More Travelled (TRMT) устарела (v%s)!
+Этот сервер требует v%s или новее.
+Скачайте обновление для подключения к серверу.
+trmt.actionbar.lightness=§eLightness §7%ds

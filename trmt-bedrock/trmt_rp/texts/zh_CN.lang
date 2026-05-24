@@ -1,0 +1,12 @@
+pack.name=TRMT — 侵蚀模组
+pack.description=由 Java 版移植（milkucha 制作）。行走会侵蚀地形；可用骨粉、刷子、锄、铲或轻盈药水恢复。
+effect.trmt.lightness=轻盈
+item.trmt:potion_of_lightness.name=轻盈药水
+item.trmt:splash_potion_of_lightness.name=喷溅型轻盈药水
+item.trmt:lingering_potion_of_lightness.name=滞留型轻盈药水
+item.trmt:tipped_arrow_lightness.name=轻盈之箭
+tile.trmt:eroded_grass_block.name=侵蚀草方块
+tile.trmt:eroded_dirt.name=侵蚀泥土
+tile.trmt:eroded_coarse_dirt.name=侵蚀粗泥土
+tile.trmt:eroded_sand.name=侵蚀沙子
+trmt.actionbar.lightness=§eLightness §7%ds

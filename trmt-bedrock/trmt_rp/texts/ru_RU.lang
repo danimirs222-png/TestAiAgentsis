@@ -1,0 +1,12 @@
+pack.name=TRMT — Дороги Истоптанные
+pack.description=Мод эрозии, портирован с Java (milkucha). Ходьба разрушает рельеф; восстановите его костной мукой, метлой, мотыгой, лопатой или зельем лёгкости.
+effect.trmt.lightness=Лёгкость
+item.trmt:potion_of_lightness.name=Зелье лёгкости
+item.trmt:splash_potion_of_lightness.name=Брызгающее зелье лёгкости
+item.trmt:lingering_potion_of_lightness.name=Стойкое зелье лёгкости
+item.trmt:tipped_arrow_lightness.name=Стрела лёгкости
+tile.trmt:eroded_grass_block.name=Эродированный блок травы
+tile.trmt:eroded_dirt.name=Эродированная грязь
+tile.trmt:eroded_coarse_dirt.name=Эродированная гравийная грязь
+tile.trmt:eroded_sand.name=Эродированный песок
+trmt.actionbar.lightness=§eLightness §7%ds

@@ -1,0 +1,12 @@
+pack.name=TRMT — The Roads More Travelled
+pack.description=Mod erozji przeniesiony z Javy (milkucha). Chodzenie eroduje teren; przywróć go mączką kostną, pędzlami, motykami, łopatami lub miksturami lekkości.
+effect.trmt.lightness=Lekkość
+item.trmt:potion_of_lightness.name=Mikstura lekkości
+item.trmt:splash_potion_of_lightness.name=Miotana mikstura lekkości
+item.trmt:lingering_potion_of_lightness.name=Trwała mikstura lekkości
+item.trmt:tipped_arrow_lightness.name=Strzała lekkości
+tile.trmt:eroded_grass_block.name=Erodowany blok trawy
+tile.trmt:eroded_dirt.name=Erodowana ziemia
+tile.trmt:eroded_coarse_dirt.name=Erodowana żwirowa ziemia
+tile.trmt:eroded_sand.name=Erodowany piasek
+trmt.actionbar.lightness=§eLightness §7%ds

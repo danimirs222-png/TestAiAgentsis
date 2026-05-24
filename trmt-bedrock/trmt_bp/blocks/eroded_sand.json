@@ -1,0 +1,102 @@
+{
+  "format_version": "1.21.40",
+  "minecraft:block": {
+    "description": {
+      "identifier": "trmt:eroded_sand",
+      "menu_category": {
+        "category": "nature",
+        "group": "minecraft:itemGroup.name.sand"
+      },
+      "states": {
+        "trmt:stage": [0, 1, 2, 3, 4],
+        "trmt:facing": ["south", "west", "north", "east"]
+      }
+    },
+    "components": {
+      "minecraft:destructible_by_mining": { "seconds_to_destroy": 0.5 },
+      "minecraft:destructible_by_explosion": { "explosion_resistance": 0.5 },
+      "minecraft:friction": 0.6,
+      "minecraft:map_color": "#E4D6A6",
+      "minecraft:light_dampening": 15,
+      "minecraft:geometry": "minecraft:geometry.full_block",
+      "minecraft:material_instances": {
+        "*":  { "texture": "sand", "render_method": "opaque" },
+        "up": { "texture": "trmt_eroded_sand_0", "render_method": "opaque" }
+      },
+      "minecraft:loot": "loot_tables/blocks/eroded_sand.json",
+      "minecraft:selection_box": {
+        "origin": [-8, 0, -8],
+        "size": [16, 16, 16]
+      },
+      "minecraft:collision_box": {
+        "origin": [-8, 0, -8],
+        "size": [16, 16, 16]
+      },
+      "tag:trmt:eroded": {},
+      "tag:sand": {},
+      "tag:shovel_diggable": {}
+    },
+    "permutations": [
+      {
+        "condition": "q.block_state('trmt:facing') == 'west'",
+        "components": { "minecraft:transformation": { "rotation": [0, 90, 0] } }
+      },
+      {
+        "condition": "q.block_state('trmt:facing') == 'north'",
+        "components": { "minecraft:transformation": { "rotation": [0, 180, 0] } }
+      },
+      {
+        "condition": "q.block_state('trmt:facing') == 'east'",
+        "components": { "minecraft:transformation": { "rotation": [0, 270, 0] } }
+      },
+      {
+        "condition": "q.block_state('trmt:stage') == 1",
+        "components": {
+          "minecraft:geometry": "geometry.trmt.eroded_sand_s1",
+          "minecraft:material_instances": {
+            "*":  { "texture": "sand", "render_method": "opaque" },
+            "up": { "texture": "trmt_eroded_sand_1", "render_method": "opaque" }
+          },
+          "minecraft:selection_box": { "origin": [-8, 0, -8], "size": [16, 14, 16] },
+          "minecraft:collision_box": { "origin": [-8, 0, -8], "size": [16, 10, 16] }
+        }
+      },
+      {
+        "condition": "q.block_state('trmt:stage') == 2",
+        "components": {
+          "minecraft:geometry": "geometry.trmt.eroded_sand_s2",
+          "minecraft:material_instances": {
+            "*":  { "texture": "sand", "render_method": "opaque" },
+            "up": { "texture": "trmt_eroded_sand_2", "render_method": "opaque" }
+          },
+          "minecraft:selection_box": { "origin": [-8, 0, -8], "size": [16, 14, 16] },
+          "minecraft:collision_box": { "origin": [-8, 0, -8], "size": [16, 10, 16] }
+        }
+      },
+      {
+        "condition": "q.block_state('trmt:stage') == 3",
+        "components": {
+          "minecraft:geometry": "geometry.trmt.eroded_sand_s3",
+          "minecraft:material_instances": {
+            "*":  { "texture": "sand", "render_method": "opaque" },
+            "up": { "texture": "trmt_eroded_sand_3", "render_method": "opaque" }
+          },
+          "minecraft:selection_box": { "origin": [-8, 0, -8], "size": [16, 12, 16] },
+          "minecraft:collision_box": { "origin": [-8, 0, -8], "size": [16, 10, 16] }
+        }
+      },
+      {
+        "condition": "q.block_state('trmt:stage') == 4",
+        "components": {
+          "minecraft:geometry": "geometry.trmt.eroded_sand_s4",
+          "minecraft:material_instances": {
+            "*":  { "texture": "sand", "render_method": "opaque" },
+            "up": { "texture": "trmt_eroded_sand_4", "render_method": "opaque" }
+          },
+          "minecraft:selection_box": { "origin": [-8, 0, -8], "size": [16, 10, 16] },
+          "minecraft:collision_box": { "origin": [-8, 0, -8], "size": [16, 10, 16] }
+        }
+      }
+    ]
+  }
+}

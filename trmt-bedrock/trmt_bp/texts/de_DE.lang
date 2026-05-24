@@ -1,0 +1,8 @@
+pack.name=TRMT — The Roads More Travelled
+pack.description=Erosions-Mod, portiert von Java (milkucha). Laufen erodiert das Gelände; wiederherstellen mit Knochenmehl, Bürsten, Hacken, Schaufeln oder Tränken der Leichtigkeit.
+trmt.effect.lightness=Leichtigkeit
+trmt.button.download_update=Mod-Update herunterladen
+trmt.disconnect.outdated=Die Client-Version von The Roads More Travelled (TRMT) ist veraltet (v%s)!
+Dieser Server benötigt v%s oder neuer.
+Bitte lade das Update herunter, um dem Server beizutreten.
+trmt.actionbar.lightness=§eLightness §7%ds

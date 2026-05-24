@@ -1,0 +1,112 @@
+{
+  "format_version": "1.21.40",
+  "minecraft:block": {
+    "description": {
+      "identifier": "trmt:eroded_grass_block",
+      "menu_category": {
+        "category": "nature",
+        "group": "minecraft:itemGroup.name.dirt"
+      },
+      "states": {
+        "trmt:stage": [0, 1, 2, 3, 4],
+        "trmt:facing": ["south", "west", "north", "east"]
+      }
+    },
+    "components": {
+      "minecraft:destructible_by_mining": { "seconds_to_destroy": 0.6 },
+      "minecraft:destructible_by_explosion": { "explosion_resistance": 0.6 },
+      "minecraft:friction": 0.6,
+      "minecraft:map_color": "#79553A",
+      "minecraft:light_dampening": 15,
+      "minecraft:geometry": "minecraft:geometry.full_block",
+      "minecraft:loot": "loot_tables/blocks/eroded_grass_block.json",
+      "minecraft:material_instances": {
+        "*": { "texture": "dirt", "render_method": "opaque" },
+        "up": {
+          "texture": "trmt_eroded_grass_top_combined_0",
+          "render_method": "opaque",
+          "tint_method": "grass"
+        },
+        "north": { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+        "south": { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+        "east":  { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+        "west":  { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+        "down":  { "texture": "dirt", "render_method": "opaque" }
+      },
+      "tag:trmt:eroded": {},
+      "tag:grass": {},
+      "tag:dirt": {},
+      "tag:shovel_diggable": {}
+    },
+    "permutations": [
+      {
+        "condition": "q.block_state('trmt:facing') == 'west'",
+        "components": { "minecraft:transformation": { "rotation": [0, 90, 0] } }
+      },
+      {
+        "condition": "q.block_state('trmt:facing') == 'north'",
+        "components": { "minecraft:transformation": { "rotation": [0, 180, 0] } }
+      },
+      {
+        "condition": "q.block_state('trmt:facing') == 'east'",
+        "components": { "minecraft:transformation": { "rotation": [0, 270, 0] } }
+      },
+      {
+        "condition": "q.block_state('trmt:stage') == 1",
+        "components": {
+          "minecraft:material_instances": {
+            "*":  { "texture": "dirt", "render_method": "opaque" },
+            "up": { "texture": "trmt_eroded_grass_top_combined_1", "render_method": "opaque", "tint_method": "grass" },
+            "north": { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "south": { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "east":  { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "west":  { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "down":  { "texture": "dirt", "render_method": "opaque" }
+          }
+        }
+      },
+      {
+        "condition": "q.block_state('trmt:stage') == 2",
+        "components": {
+          "minecraft:material_instances": {
+            "*":  { "texture": "dirt", "render_method": "opaque" },
+            "up": { "texture": "trmt_eroded_grass_top_combined_2", "render_method": "opaque", "tint_method": "grass" },
+            "north": { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "south": { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "east":  { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "west":  { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "down":  { "texture": "dirt", "render_method": "opaque" }
+          }
+        }
+      },
+      {
+        "condition": "q.block_state('trmt:stage') == 3",
+        "components": {
+          "minecraft:material_instances": {
+            "*":  { "texture": "dirt", "render_method": "opaque" },
+            "up": { "texture": "trmt_eroded_grass_top_combined_3", "render_method": "opaque", "tint_method": "grass" },
+            "north": { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "south": { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "east":  { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "west":  { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "down":  { "texture": "dirt", "render_method": "opaque" }
+          }
+        }
+      },
+      {
+        "condition": "q.block_state('trmt:stage') == 4",
+        "components": {
+          "minecraft:material_instances": {
+            "*":  { "texture": "dirt", "render_method": "opaque" },
+            "up": { "texture": "trmt_eroded_grass_top_combined_4", "render_method": "opaque", "tint_method": "grass" },
+            "north": { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "south": { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "east":  { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "west":  { "texture": "trmt_grass_side_base", "render_method": "opaque" },
+            "down":  { "texture": "dirt", "render_method": "opaque" }
+          }
+        }
+      }
+    ]
+  }
+}

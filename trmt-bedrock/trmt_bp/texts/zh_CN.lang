@@ -1,0 +1,8 @@
+pack.name=TRMT — 侵蚀模组
+pack.description=由 Java 版移植（milkucha 制作）。行走会侵蚀地形；可用骨粉、刷子、锄、铲或轻盈药水恢复。
+trmt.effect.lightness=轻盈
+trmt.button.download_update=下载模组更新
+trmt.disconnect.outdated=The Roads More Travelled (TRMT) 客户端版本已过时（v%s）！
+此服务器需要 v%s 或更新版本。
+请下载更新后再加入服务器。
+trmt.actionbar.lightness=§eLightness §7%ds

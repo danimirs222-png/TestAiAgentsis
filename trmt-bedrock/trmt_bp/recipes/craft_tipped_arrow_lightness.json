@@ -1,0 +1,20 @@
+{
+  "format_version": "1.21.40",
+  "minecraft:recipe_shaped": {
+    "description": { "identifier": "trmt:craft_tipped_arrow_lightness" },
+    "tags": ["crafting_table"],
+    "pattern": [
+      "AAA",
+      "ALA",
+      "AAA"
+    ],
+    "key": {
+      "A": { "item": "minecraft:arrow" },
+      "L": { "item": "trmt:lingering_potion_of_lightness" }
+    },
+    "result": {
+      "item": "trmt:tipped_arrow_lightness",
+      "count": 8
+    }
+  }
+}

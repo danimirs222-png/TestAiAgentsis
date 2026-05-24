@@ -1,0 +1,8 @@
+pack.name=TRMT — The Roads More Travelled
+pack.description=Erosion mod ported from Java (milkucha). Walking causes terrain to erode; restore it with bone meal, brushes, hoes, shovels or Potions of Lightness.
+trmt.effect.lightness=Lightness
+trmt.button.download_update=Download Mod Update
+trmt.disconnect.outdated=The Roads More Travelled (TRMT) client version is outdated (v%s)!
+This server requires v%s or newer.
+Please download the update to join this server.
+trmt.actionbar.lightness=§eLightness §7%ds

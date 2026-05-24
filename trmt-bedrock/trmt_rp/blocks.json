@@ -1,0 +1,19 @@
+{
+  "format_version": [1, 1, 0],
+  "trmt:eroded_dirt": {
+    "sound": "gravel",
+    "isotropic": false
+  },
+  "trmt:eroded_coarse_dirt": {
+    "sound": "gravel",
+    "isotropic": false
+  },
+  "trmt:eroded_grass_block": {
+    "sound": "grass",
+    "isotropic": { "up": true }
+  },
+  "trmt:eroded_sand": {
+    "sound": "sand",
+    "isotropic": { "up": true }
+  }
+}

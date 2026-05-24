@@ -1,0 +1,39 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "pack.name",
+    "description": "pack.description",
+    "uuid": "bbd1ad8c-b2a4-423a-b21d-a7bfc05918a5",
+    "version": [0, 5, 0],
+    "min_engine_version": [1, 21, 40]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "57cdecd8-eca2-428a-aa72-e1139877e7ad",
+      "version": [0, 5, 0]
+    },
+    {
+      "type": "script",
+      "language": "javascript",
+      "entry": "scripts/main.js",
+      "uuid": "84728a06-97e5-4fdb-990b-9e3a1b285b0a",
+      "version": [0, 5, 0]
+    }
+  ],
+  "dependencies": [
+    {
+      "uuid": "ef7a7787-bedf-4419-81c2-e7daf18f91eb",
+      "version": [0, 5, 0]
+    },
+    {
+      "module_name": "@minecraft/server",
+      "version": "1.17.0"
+    }
+  ],
+  "metadata": {
+    "authors": ["milkucha (Java original)", "Devin (Bedrock port)"],
+    "license": "CC-BY-NC-4.0",
+    "url": "https://github.com/milkucha/trmt"
+  }
+}

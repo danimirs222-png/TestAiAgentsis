@@ -1,0 +1,44 @@
+{
+  "format_version": "1.21.40",
+  "minecraft:block": {
+    "description": {
+      "identifier": "trmt:eroded_coarse_dirt",
+      "menu_category": {
+        "category": "nature",
+        "group": "minecraft:itemGroup.name.dirt"
+      },
+      "states": {
+        "trmt:facing": ["south", "west", "north", "east"]
+      }
+    },
+    "components": {
+      "minecraft:destructible_by_mining": { "seconds_to_destroy": 0.75 },
+      "minecraft:destructible_by_explosion": { "explosion_resistance": 0.5 },
+      "minecraft:friction": 0.6,
+      "minecraft:map_color": "#866043",
+      "minecraft:light_dampening": 15,
+      "minecraft:geometry": "minecraft:geometry.full_block",
+      "minecraft:material_instances": {
+        "*": { "texture": "coarse_dirt", "render_method": "opaque" }
+      },
+      "minecraft:loot": "loot_tables/blocks/eroded_coarse_dirt.json",
+      "tag:trmt:eroded": {},
+      "tag:dirt": {},
+      "tag:shovel_diggable": {}
+    },
+    "permutations": [
+      {
+        "condition": "q.block_state('trmt:facing') == 'west'",
+        "components": { "minecraft:transformation": { "rotation": [0, 90, 0] } }
+      },
+      {
+        "condition": "q.block_state('trmt:facing') == 'north'",
+        "components": { "minecraft:transformation": { "rotation": [0, 180, 0] } }
+      },
+      {
+        "condition": "q.block_state('trmt:facing') == 'east'",
+        "components": { "minecraft:transformation": { "rotation": [0, 270, 0] } }
+      }
+    ]
+  }
+}

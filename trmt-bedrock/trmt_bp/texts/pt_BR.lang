@@ -1,0 +1,8 @@
+pack.name=TRMT — The Roads More Travelled
+pack.description=Mod de erosão portado de Java (milkucha). Caminhar erode o terreno; restaure-o com farinha de osso, pincéis, enxadas, pás ou poções de leveza.
+trmt.effect.lightness=Leveza
+trmt.button.download_update=Baixar atualização do mod
+trmt.disconnect.outdated=A versão do cliente The Roads More Travelled (TRMT) está desatualizada (v%s)!
+Este servidor requer v%s ou mais recente.
+Baixe a atualização para entrar neste servidor.
+trmt.actionbar.lightness=§eLightness §7%ds

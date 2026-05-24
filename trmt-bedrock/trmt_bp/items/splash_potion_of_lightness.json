@@ -1,0 +1,25 @@
+{
+  "format_version": "1.21.40",
+  "minecraft:item": {
+    "description": {
+      "identifier": "trmt:splash_potion_of_lightness",
+      "menu_category": {
+        "category": "items",
+        "group": "minecraft:itemGroup.name.potion"
+      }
+    },
+    "components": {
+      "minecraft:icon": "trmt_splash_potion_lightness",
+      "minecraft:max_stack_size": 1,
+      "minecraft:hand_equipped": true,
+      "minecraft:liquid_clipped": true,
+      "minecraft:use_animation": "bow",
+      "minecraft:use_modifiers": {
+        "use_duration": 32,
+        "movement_modifier": 1.0
+      },
+      "tag:trmt:lightness_potion": {},
+      "tag:trmt:lightness_splash": {}
+    }
+  }
+}

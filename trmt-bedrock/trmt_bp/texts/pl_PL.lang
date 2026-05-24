@@ -1,0 +1,8 @@
+pack.name=TRMT — The Roads More Travelled
+pack.description=Mod erozji przeniesiony z Javy (milkucha). Chodzenie eroduje teren; przywróć go mączką kostną, pędzlami, motykami, łopatami lub miksturami lekkości.
+trmt.effect.lightness=Lekkość
+trmt.button.download_update=Pobierz aktualizację moda
+trmt.disconnect.outdated=Wersja klienta The Roads More Travelled (TRMT) jest przestarzała (v%s)!
+Ten serwer wymaga v%s lub nowszej.
+Pobierz aktualizację, aby dołączyć do serwera.
+trmt.actionbar.lightness=§eLightness §7%ds

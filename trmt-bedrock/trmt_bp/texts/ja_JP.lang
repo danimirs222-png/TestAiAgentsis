@@ -1,0 +1,8 @@
+pack.name=TRMT — The Roads More Travelled
+pack.description=Java版から移植された侵食モッド（milkucha製）。歩行で地形が侵食される。骨粉、ハケ、クワ、シャベル、または軽さのポーションで復元可能。
+trmt.effect.lightness=軽さ
+trmt.button.download_update=Modのアップデートをダウンロード
+trmt.disconnect.outdated=The Roads More Travelled (TRMT) のクライアントバージョンが古くなっています (v%s)！
+このサーバーはv%s以上が必要です。
+アップデートをダウンロードしてサーバーに参加してください。
+trmt.actionbar.lightness=§eLightness §7%ds
